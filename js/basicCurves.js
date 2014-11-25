@@ -1,0 +1,3 @@
+define(["nurbs"],function(nurbs) {
+
+});

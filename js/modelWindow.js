@@ -9,5 +9,13 @@ define(['camera'], function(Camera) {
     this.camera = new Camera();
   }
   
+  Window.prototype.setPerspective = function(persp) {
+    this.camera.isPerspective = persp;
+  }
+  
+  Window.prototype.setOrtho = function(persp) {
+    this.camera.isPerspective = !persp;
+  }
+  
   return Window;
 });

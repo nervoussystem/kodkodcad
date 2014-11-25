@@ -24,6 +24,7 @@ define(["gl-matrix-min"],function(glMatrix) {
     this.fixX = false;
     this.fixY = false;
     this.fixZ = false;
+    this.isPerspective = false;
   }
   vec3.angle = function(v1,v2) {
     return Math.acos(vec3.dot(v1,v2)/(vec3.length(v1)*vec3.length(v2)));

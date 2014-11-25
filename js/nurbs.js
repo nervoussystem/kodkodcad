@@ -1,19 +1,7 @@
-//VEC4 -----------------------------------------------------------------
-
-/*
-var vec4 = {};
-vec4.create=function(a){var b=new Float32Array(4);if(a){b[0]=a[0];b[1]=a[1];b[2]=a[2];if(!a[3]) b[3]=1.0; else b[3]=a[3];}return b};
-vec4.set=function(a,b){b[0]=a[0];b[1]=a[1];b[2]=a[2];b[3]=a[3];return b};
-vec4.add=function(a,b,c){if(!c||a==c){a[0]+=b[0];a[1]+=b[1];a[2]+=b[2];a[3]+=b[3];return a}c[0]=a[0]+b[0];c[1]=a[1]+b[1];c[2]=a[2]+b[2];c[3]=a[3]+b[3];return c};
-vec4.subtract=function(a,b,c){if(!c||a==c){a[0]-=b[0];a[1]-=b[1];a[2]-=b[2];a[3]-=b[3];return a}c[0]=a[0]-b[0];c[1]=a[1]-b[1];c[2]=a[2]-b[2];c[3]=a[3]-b[3];return c};
-vec4.negate=function(a,b){b||(b=a);b[0]=-a[0];b[1]=-a[1];b[2]=-a[2];b[3]=-a[3];return b};
-vec4.scale=function(a,b,c){if(!c||a==c){a[0]*=b;a[1]*=b;a[2]*=b;a[3]*=b;return a}c[0]=a[0]*b;c[1]=a[1]*b;c[2]=a[2]*b;c[3]=a[3]*b;return c};
-vec4.normalize=function(a,b){b||(b=a);var c=a[0],d=a[1],e=a[2],f=a[3],g=Math.sqrt(c*c+d*d+e*e+f*f);if(g){if(g==1){b[0]=c;b[1]=d;b[2]=e;b[3]=f;return b}}else{b[0]=0;b[1]=0;b[2]=0;b[3]=0;return b}g=1/g;b[0]=c*g;b[1]=d*g;b[2]=e*g;b[3]=f*g;return b};
-vec4.length=function(a){var b=a[0],c=a[1],d=a[2];a=a[3];return Math.sqrt(b*b+c*c+d*d+a*a)};
-vec4.dot=function(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]};
-vec4.lerp=function(a,b,c,d){d||(d=a);d[0]=a[0]+c*(b[0]-a[0]);d[1]=a[1]+c*(b[1]-a[1]);d[2]=a[2]+c*(b[2]-a[2]);d[3]=a[3]+c*(b[3]-a[3]);return d};
-vec4.str=function(a){return "["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
-*/
+define(["gl-matrix-min"], function(glMatrix) {
+"use strict";
+var vec4 = glMatrix.vec4;
+var vec3 = glMatrix.vec3;
 //check for 0
 vec4.projectDown=function(a,b){var d=1.0/a[3];if(!b) {b=vec3.create();} b[0]=a[0]*d;b[1]=a[1]*d;b[2]=a[2]*d;return b;};
 //optimize to avoid multiplications with no b
@@ -699,3 +687,6 @@ nurbs.revolve = function(crv, axis) {
 nurbs.sweep = function(crv1,crv2) {
 
 }
+
+return nurbs;
+});
