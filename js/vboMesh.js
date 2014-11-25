@@ -1,26 +1,7 @@
-(function(_global) {
+define(['gl-matrix-min'],function(glMatrix) {
   "use strict";
-
-  var shim = {};
-  if (typeof(exports) === 'undefined') {
-    if(typeof define == 'function' && typeof define.amd == 'object' && define.amd) {
-      shim.exports = {};
-      define(function() {
-        return shim.exports;
-      });
-    } else {
-      //this thing lives in a browser, define its namespaces in global
-      shim.exports = typeof(window) !== 'undefined' ? window : _global;
-    }
-  }
-  else {
-    //this thing lives in commonjs, define its namespaces in exports
-    shim.exports = exports;
-  }
-  (function(exports) {
-  
+  var vec3 = glMatrix.vec3;
 var vboMesh = {};
-
 vboMesh.create = function(gl) {
     var vbo = {};
     vbo.vertexData = new Float32Array(3*100);
@@ -320,10 +301,5 @@ vboMesh.computeSmoothNormalsVBO = function(vbo) {
         vertexData[i6+5] /= len;
     }
 }
-
-if(typeof(exports) !== 'undefined') {
-    exports.vboMesh = vboMesh;
-}
-
-})(shim.exports);
-})(this);
+return vboMesh;
+});

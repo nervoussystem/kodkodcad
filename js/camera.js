@@ -7,12 +7,14 @@
 define(["gl-matrix-min"],function(glMatrix) {
   var vec3 = glMatrix.vec3;
   var mat4 = glMatrix.mat4;
-  var quat = glMatrix.mat4;
+  var mat3 = glMatrix.mat3;
+  var quat = glMatrix.quat;
   
   function Camera() {
     this.rot = quat.create();
     this.center = vec3.create();
     this.cameraMatrix = mat4.create();
+    this.nMatrix = mat3.create();
     mat4.identity(this.cameraMatrix);
     this.distance = 10;
     this.velocityX = 0;
@@ -41,7 +43,8 @@ define(["gl-matrix-min"],function(glMatrix) {
       vec3.add(pos,pos, this.center);
       vec3.transformQuat(up,up,this.rot);
      // mat4.lookAt(pos,this.center,up,mat);
-      mat4.lookAt(cameraMatrix,pos,this.center,up);
+      mat4.lookAt(this.cameraMatrix,pos,this.center,up);
+      mat3.normalFromMat4(this.nMatrix, this.cameraMatrix);
     };
   })();
 
@@ -80,10 +83,10 @@ define(["gl-matrix-min"],function(glMatrix) {
     vec3.add(this.center,this.center,temp);
   }
 
-  Camera.prototype.mouseRotate = function(dx,dy,mx,my) {
+  Camera.prototype.mouseRotate = function(dx,dy,rx,ry) {
     var u = [0,0,-100*.6*this.startDistance]; //this.distance?
 
-    var rho = Math.abs((gl.viewportWidth / 2.0) - mx) / (gl.viewportWidth/2.0);
+    var rho = Math.abs(rx);
     var adz = Math.abs(dy) * rho;
     var ady = Math.abs(dy) * (1 - rho);
     var ySign = dy < 0 ? -1 : 1;
@@ -93,11 +96,10 @@ define(["gl-matrix-min"],function(glMatrix) {
     var vz = vec3.create(); //avoid
     vec3.add(vz,u,[0,adz,0]);
     this.velocityZ += vec3.angle(u, vz) * -ySign
-        * (mx < gl.viewportWidth / 2 ? -1 : 1);
+        * (rx < 0 ? -1 : 1);
 
 
-    var eccentricity = Math.abs((gl.viewportHeight / 2.0) - my)
-        / (gl.viewportHeight / 2.0);
+    var eccentricity = Math.abs(ry);
     var xSign = dx > 0 ? -1 : 1;
     adz = Math.abs(dx) * eccentricity;
     var adx = Math.abs(dx) * (1 - eccentricity);
@@ -106,7 +108,7 @@ define(["gl-matrix-min"],function(glMatrix) {
     this.velocityY += vec3.angle(u,vx)*xSign;
     vec3.add(vz,u,[0,adz,0]);
     this.velocityZ += vec3.angle(u,vz)*xSign
-      * (my > gl.viewportHeight / 2 ? -1 : 1);
+      * (ry > 0 ? -1 : 1);
     
   }
 

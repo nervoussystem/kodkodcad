@@ -6,4 +6,5 @@ requirejs.config({
 
 requirejs(['modeler'], function(modeler) {
   kodkod = modeler;
+  kodkod.step();
 });
