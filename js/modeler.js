@@ -130,7 +130,39 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     //snap
     
     //if no snap project to plane
+    
   }
+  
+  var mouseRay = (function() {
+    var pt1 = vec4.create();
+    var pt2 = vec4.create();
+    var invMatrix = mat4.create();
+    return function mouseRay(ray) {
+      var x = mouseHandler.mouseX;
+      var y = mouseHandler.mouseY;
+      var minDepth = 1e9,vbo;
+      var pt = vec3.create();
+      
+      //get ray
+      vec4.set(pt1, 2.0*x/currWindow.width-1.0, 1.0-2.0*y/currWindow.height,-1.0,1.0);
+      vec4.set(pt2, 2.0*x/currWindow.width-1.0, 1.0-2.0*y/currWindow.height,1.0,1.0);
+      mat4.invert(invMatrix, pMatrix);
+      vec4.transformMat4(pt1, pt1, invMatrix);
+      vec4.transformMat4(pt2, pt2, invMatrix);
+      pt1[2] = -1.0;
+      pt1[3] = 0.0;
+      pt2[2] = -1.0;
+      pt2[3] = 0.0;
+      mat4.invert(invMatrix,currWindow.camera.cameraMatrix);
+      vec4.transformMat4(pt1, pt1, invMatrix);
+      vec4.transformMat4(pt2, pt2, invMatrix);
+      vec3.normalize(ray[1],dir);
+
+      var camPos = vec3.create();
+      camPos[3] = 1.0;
+      vec4.transformMat4(camPos,camPos,invMatrix);  
+    }
+  })();
   
   modeler.selectObject = function() {
     var x = mouseHandler.mouseX;
