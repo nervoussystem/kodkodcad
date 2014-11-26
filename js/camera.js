@@ -47,7 +47,10 @@ define(["gl-matrix-min"],function(glMatrix) {
       mat3.normalFromMat4(this.nMatrix, this.cameraMatrix);
     };
   })();
-
+  
+  Camera.prototype.lookAt = function(eye, center, up) {
+    
+  }
 
   Camera.prototype.eyeDir = function(dir) {
     vec3.set(dir,0,0,1);
@@ -113,9 +116,9 @@ define(["gl-matrix-min"],function(glMatrix) {
   }
 
   Camera.prototype.mouseZoom = function(delta) {
-    this.distance = Math.max(this.minDistance, this.distance - delta * Math.sqrt(this.distance * .02));
+    this.distance = Math.max(this.minDistance, this.distance - delta * Math.sqrt(this.distance)*.1);
   }
-
+  
   Camera.prototype.step = function() {
     this.velocityX *= this.dampening;
     this.velocityY *= this.dampening;

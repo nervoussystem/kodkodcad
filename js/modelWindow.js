@@ -7,6 +7,7 @@ define(['camera'], function(Camera) {
     this.height = 0;
     
     this.camera = new Camera();
+    this.plane = [0,0,1,0];
   }
   
   Window.prototype.setPerspective = function(persp) {

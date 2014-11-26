@@ -1,4 +1,4 @@
-define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-matrix-min', 'vboMesh','pointer'],function(doc,webgl,modelWindow,aabb,glShader,basicCurves, glMatrix, vboMesh,pointer)
+define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-matrix-min', 'vboMesh','pointer','intersect'],function(doc,webgl,modelWindow,aabb,glShader,basicCurves, glMatrix, vboMesh,pointer,intersect)
 {
   "use strict";
   var mat4 = glMatrix.mat4;
@@ -24,6 +24,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   modeler.modules = [];
   
   var previousPt = vec3.create();
+  var selectedPt = vec3.create();
   modeler.pMatrix = mat4.create();
   
   var doRedraw = true;
@@ -34,8 +35,15 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   */
   var canvas = doc.getElementById("mainCanvas");
   var gl = webgl.init(canvas);
+  modeler.gl = gl;
   modeler.shader = glShader.loadShader(gl,"shaders/phongSimple.vert","shaders/phongSimple.frag");
   var mouseHandler = new pointer(canvas);
+  /*
+    misc drawing stuff
+  */
+  var pointBuffer = gl.createBuffer();
+  
+
   /*
     setup windows
   */
@@ -67,6 +75,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   modeler.redraw = function() {
     if(!modeler.shader.isReady) { return; }
     modeler.shader.begin();
+    gl.enable(gl.VERTEX_PROGRAM_POINT_SIZE);
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     for(var i=0, numWindows = modeler.windows.length;i<numWindows; ++i) {
@@ -98,6 +107,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
      modeler.shader.uniforms.matColor.set([.5,.5,.5,1.0]);
      for(var j=0, numObjects = modeler.objects.length; j<numObjects; ++j) {
         var obj = modeler.objects[j];
+        /*
         modeler.shader.attribs.vertexPosition.set(obj.display.vertexBuffer);
         if(modeler.shader.attribs.vertexNormal && obj.display.normalsEnabled) {
           modeler.shader.attribs.vertexNormal.set(obj.display.normalBuffer);
@@ -114,12 +124,32 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
           gl.vertexAttrib3fv(modeler.shader.attribs.vertexNormal.location,[0,0,0]);
           gl.drawArrays(gl.LINE_STRIP,0,obj.display.numVertices);
         } else {
-          gl.drawArrays(gl.POINTS,0,obj.display.numIndices);
-        }
+          gl.drawArrays(gl.POINTS,0,obj.display.numVertices);
+        }*/
       }
     }
     
+    //draw selected point
+    drawPoints(selectedPt);
+    
     modeler.shader.end();
+  }
+  
+  function drawPoints(pts) {
+    //need to set shader state
+    if(modeler.shader.attribs.vertexNormal) {
+      modeler.shader.attribs.vertexNormal.disable();
+      gl.vertexAttrib3fv(modeler.shader.attribs.vertexNormal.location,[0,0,0]);
+    }
+    if(modeler.shader.attribs.vertexColor) {
+      modeler.shader.attribs.vertexColor.disable();
+      gl.vertexAttrib3fv(modeler.shader.attribs.vertexColor.location,[0,0,0]);
+    }
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER,pointBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, pts, gl.STREAM_DRAW);
+    modeler.shader.attribs.vertexPosition.set(pointBuffer);
+    gl.drawArrays(gl.POINTS,0,pts.length/3);
   }
   
   modeler.runCommand = function(cmd) {
@@ -127,17 +157,19 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   }
   
   modeler.selectPoint = function(pt) {
+    var ray = mouseRay();
     //snap
     
     //if no snap project to plane
-    
+    intersect.rayPlane(pt,ray[0],ray[1], currWindow.plane);
   }
   
   var mouseRay = (function() {
     var pt1 = vec4.create();
     var pt2 = vec4.create();
     var invMatrix = mat4.create();
-    return function mouseRay(ray) {
+    var ray = [vec3.create(),vec3.create()];
+    return function mouseRay() {
       var x = mouseHandler.mouseX;
       var y = mouseHandler.mouseY;
       var minDepth = 1e9,vbo;
@@ -146,45 +178,26 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
       //get ray
       vec4.set(pt1, 2.0*x/currWindow.width-1.0, 1.0-2.0*y/currWindow.height,-1.0,1.0);
       vec4.set(pt2, 2.0*x/currWindow.width-1.0, 1.0-2.0*y/currWindow.height,1.0,1.0);
-      mat4.invert(invMatrix, pMatrix);
+      mat4.invert(invMatrix, modeler.pMatrix);
       vec4.transformMat4(pt1, pt1, invMatrix);
       vec4.transformMat4(pt2, pt2, invMatrix);
-      pt1[2] = -1.0;
+      //pt1[2] = -1.0;
       pt1[3] = 0.0;
-      pt2[2] = -1.0;
+      //pt2[2] = -1.0;
       pt2[3] = 0.0;
       mat4.invert(invMatrix,currWindow.camera.cameraMatrix);
       vec4.transformMat4(pt1, pt1, invMatrix);
       vec4.transformMat4(pt2, pt2, invMatrix);
-      vec3.normalize(ray[1],dir);
-
-      var camPos = vec3.create();
-      camPos[3] = 1.0;
-      vec4.transformMat4(camPos,camPos,invMatrix);  
+      vec3.sub(ray[1], pt1,pt2);
+      vec3.normalize(ray[1], ray[1]);
+      
+      vec3.copy(ray[0], pt2);
+      return ray;
     }
   })();
   
   modeler.selectObject = function() {
-    var x = mouseHandler.mouseX;
-    var y = mouseHandler.mouseY;
-    var minDepth = 1e9,vbo;
-    var pt = vec3.create();
-    
-    //get ray
-    var ray = vec4.create();
-    vec4.set(ray, 2.0*x/currWindow.width-1.0, 1.0-2.0*y/currWindow.height,-1.0,1.0);
-    var invMatrix = mat4.create();
-    mat4.invert(invMatrix, pMatrix);
-    vec4.transformMat4(ray, ray, invMatrix);
-    ray[2] = -1.0;
-    ray[3] = 0.0;
-    mat4.invert(invMatrix,currWindow.camera.cameraMatrix);
-    vec4.transformMat4(ray, ray, invMatrix);
-    vec3.normalize(ray,ray);
-
-    var camPos = vec4.create();
-    camPos[3] = 1.0;
-    vec4.transformMat4(camPos,camPos,invMatrix);
+    var ray = mouseRay();
     var i0,i1,i2;
     var v0 = vec3.create(),
       v1 = vec3.create(),
@@ -220,6 +233,10 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     else return null;
   }
   
+  /*
+    mouse interactions
+  */
+  
   mouseHandler.mouseDragged = function(event) {
     if(mouseHandler.mouseButton == 3) {
       var dx = mouseHandler.mouseX-mouseHandler.pmouseX;
@@ -236,6 +253,10 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
         currWindow.camera.mouseRotate(dx,dy,rx,ry);
       }
     }
+  }
+  
+  mouseHandler.mouseMoved = function(event) {
+    modeler.selectPoint(selectedPt);
   }
   
   

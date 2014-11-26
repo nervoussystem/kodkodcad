@@ -40,12 +40,17 @@ for(var i=0;i<10;++i) {
 
 //make a nurbs crv object
 //initialize with points??
-nurbs.createCrv = function(crv,degree) {
+nurbs.createCrv = function(pts,degree) {
 	crv = crv || {};
 	crv.degree = degree || 3;
-	crv.knots = new Array(crv.degree+1);
+	crv.knots = new Array(crv.degree+1+pts.length);
 	for(var i=0;i<=crv.degree;i++) crv.knots[i] = 0;
 	crv.controlPts = [];
+  for(var i=0;i<pts.length;++i) {
+    var newPt = vec4.create();
+    vec4.fromVec3(newPt, pts[i]);
+    crv.controlPts.push(newPt);
+  }
 	return crv;
 }
 
