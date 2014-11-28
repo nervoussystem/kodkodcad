@@ -76,7 +76,7 @@ define(["gl-matrix-min"],function(glMatrix) {
   }
 
   Camera.prototype.mousePan = function(dx,dy) {
-    var panScale = Math.sqrt(this.distance *0.0001);
+    var panScale = this.distance*0.005;
     this.pan(-dx*panScale, -dy*panScale);
   }
 

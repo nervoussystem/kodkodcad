@@ -1,10 +1,10 @@
-define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-matrix-min', 'vboMesh','pointer','intersect'],function(doc,webgl,modelWindow,aabb,glShader,basicCurves, glMatrix, vboMesh,pointer,intersect)
+define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-matrix-min', 'vboMesh','pointer','intersect','exports'],function(doc,webgl,modelWindow,aabb,glShader,basicCurves, glMatrix, vboMesh,pointer,intersect,exports)
 {
   "use strict";
   var mat4 = glMatrix.mat4;
   var vec4 = glMatrix.vec4;
   var vec3 = glMatrix.vec3;
-  var modeler = {};
+  var modeler = exports;
   
   /*
     CONSTANTS
@@ -63,19 +63,25 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     
   }
   
-  var testObj = {};
-  testObj.type = modeler.CURVE;
-  testObj.display = vboMesh.create32(gl);
-  for(var i=0;i<=20;++i) {
-    vboMesh.addVertex(testObj.display,[Math.cos(Math.PI*2*i/20),Math.sin(Math.PI*2*i/20),0]);
+  modeler.init = function() {
+    //var testObj = {};
+    //testObj.type = modeler.CURVE;
+    //testObj.display = vboMesh.create32(gl);
+    var pts = [];
+    for(var i=0;i<10;++i) {
+      //vboMesh.addVertex(testObj.display,[Math.cos(Math.PI*2*i/20),Math.sin(Math.PI*2*i/20),0]);
+      pts.push([Math.cos(Math.PI*2*i/10),Math.sin(Math.PI*2*i/10),0]);
+    }
+    //vboMesh.buffer(testObj.display, gl);
+    //modeler.objects.push(testObj);
+    var testObj = basicCurves.curveFromPts(pts);
+    testObj.updateMesh();
+    modeler.objects.push(testObj);
   }
-  vboMesh.buffer(testObj.display, gl);
-  modeler.objects.push(testObj);
   
   modeler.redraw = function() {
     if(!modeler.shader.isReady) { return; }
     modeler.shader.begin();
-    gl.enable(gl.VERTEX_PROGRAM_POINT_SIZE);
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     for(var i=0, numWindows = modeler.windows.length;i<numWindows; ++i) {
@@ -107,6 +113,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
      modeler.shader.uniforms.matColor.set([.5,.5,.5,1.0]);
      for(var j=0, numObjects = modeler.objects.length; j<numObjects; ++j) {
         var obj = modeler.objects[j];
+        obj.draw();
         /*
         modeler.shader.attribs.vertexPosition.set(obj.display.vertexBuffer);
         if(modeler.shader.attribs.vertexNormal && obj.display.normalsEnabled) {

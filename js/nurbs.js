@@ -41,10 +41,19 @@ for(var i=0;i<10;++i) {
 //make a nurbs crv object
 //initialize with points??
 nurbs.createCrv = function(pts,degree) {
-	crv = crv || {};
+	var crv = {};
 	crv.degree = degree || 3;
 	crv.knots = new Array(crv.degree+1+pts.length);
-	for(var i=0;i<=crv.degree;i++) crv.knots[i] = 0;
+  var i=0;
+	var knot = 0;
+  for(i=0;i<crv.degree+1;i++) crv.knots[i] = knot;
+  for(;i<crv.knots.length-crv.degree-1;++i) {
+    crv.knots[i] = ++knot;
+  }
+  knot++;
+  for(;i<crv.knots.length;++i) {
+    crv.knots[i] = knot;
+  }
 	crv.controlPts = [];
   for(var i=0;i<pts.length;++i) {
     var newPt = vec4.create();
@@ -127,63 +136,6 @@ nurbs.evaluateCrv = (function() {
     	return vec4.projectDown(evalPt,pt);
     };
 })();
-/*	 
-	 public PVector derivative(float u, int k) {
-		 Vector4D[] derivesW = new Vector4D[k+1];
-		 if(k>degree) return new PVector();
-		 int currKnot = findKnot(u);
-		 Vector4D[] hPts = new Vector4D[degree+1];
-		 for(int i=0;i<=degree;++i) {
-	      hPts[i] = Vector4D.multiply(new Vector4D(controlPts[currKnot-degree+i].x,controlPts[currKnot-degree+i].y,controlPts[currKnot-degree+i].z),weights[currKnot-degree+i]);
-		 }
-		 float[][] basFunc = deriveBasisFunctions(currKnot,u, k);
-		 for(int i=0;i<=k;++i) {
-			 derivesW[i] = new Vector4D();
-			 for(int j=0;j<=degree;++j) {
-				 derivesW[i] = Vector4D.add(derivesW[i],Vector4D.multiply(hPts[j],basFunc[i][j]));
-			 }
-		 }
-		 
-		 PVector[] derives = new PVector[derivesW.length];
-		 derives[0] = new PVector();
-		 for(int i=0;i<=k;++i) {
-			PVector currPt = new PVector(derivesW[i].x,derivesW[i].y,derivesW[i].z);
-			for(int j=1;j<=i;++j) {
-				currPt = PVector.sub(currPt,PVector.mult(derives[i-j],B[i][j]*derivesW[j].w));
-			}
-			derives[i] = new PVector(currPt.x/derivesW[0].w,currPt.y/derivesW[0].w,currPt.z/derivesW[0].w);
-		 }
-		 return derives[k];
-		 
-	 }
-	 
-	 public PVector[] allDerivatives(float u, int k) {
-		 Vector4D[] derivesW = new Vector4D[k+1];
-		 int currKnot = findKnot(u);
-		 Vector4D[] hPts = new Vector4D[degree+1];
-		 for(int i=0;i<=degree;++i) {
-	      hPts[i] = Vector4D.multiply(new Vector4D(controlPts[currKnot-degree+i].x,controlPts[currKnot-degree+i].y,controlPts[currKnot-degree+i].z),weights[currKnot-degree+i]);
-		 }		 
-		 float[][] basFunc = deriveBasisFunctions(currKnot,u, k);
-		 for(int i=0;i<=k;++i) {
-			 derivesW[i] = new Vector4D();
-			 for(int j=0;j<=degree;++j)
-				 derivesW[i] = Vector4D.add(derivesW[i],Vector4D.multiply(hPts[j],basFunc[i][j]));
-		 }
-		 
-		 PVector[] derives = new PVector[derivesW.length];
-		 derives[0] = new PVector();
-		 for(int i=0;i<=k;++i) {
-			PVector currPt = new PVector(derivesW[i].x,derivesW[i].y,derivesW[i].z);
-			for(int j=1;j<=i;++j) {
-				currPt = PVector.sub(currPt,PVector.mult(derives[i-j],B[i][j]*derivesW[j].w));
-			}
-			derives[i] = new PVector(currPt.x/derivesW[0].w,currPt.y/derivesW[0].w,currPt.z/derivesW[0].w);
-		 }
-		 return derives;
-		 
-	 }	 
-*/	  
 
 nurbs.crvDerivatives = (function() {
 	var hPts = new Array(nurbs.MAX_DEGREE+1);
@@ -219,34 +171,11 @@ nurbs.crvDerivatives = (function() {
 		}
 		return out;
 	};
-	/*
-	 public PVector[] allDerivatives(float u, int k) {
-		 Vector4D[] derivesW = new Vector4D[k+1];
-		 int currKnot = findKnot(u);
-		 Vector4D[] hPts = new Vector4D[degree+1];
-		 for(int i=0;i<=degree;++i) {
-	      hPts[i] = Vector4D.multiply(new Vector4D(controlPts[currKnot-degree+i].x,controlPts[currKnot-degree+i].y,controlPts[currKnot-degree+i].z),weights[currKnot-degree+i]);
-		 }		 
-		 float[][] basFunc = deriveBasisFunctions(currKnot,u, k);
-		 for(int i=0;i<=k;++i) {
-			 derivesW[i] = new Vector4D();
-			 for(int j=0;j<=degree;++j)
-				 derivesW[i] = Vector4D.add(derivesW[i],Vector4D.multiply(hPts[j],basFunc[i][j]));
-		 }
-		 
-		 PVector[] derives = new PVector[derivesW.length];
-		 derives[0] = new PVector();
-		 for(int i=0;i<=k;++i) {
-			PVector currPt = new PVector(derivesW[i].x,derivesW[i].y,derivesW[i].z);
-			for(int j=1;j<=i;++j) {
-				currPt = PVector.sub(currPt,PVector.mult(derives[i-j],B[i][j]*derivesW[j].w));
-			}
-			derives[i] = new PVector(currPt.x/derivesW[0].w,currPt.y/derivesW[0].w,currPt.z/derivesW[0].w);
-		 }
-		 return derives;
-		 
-	 }*/
 })();	 
+
+nurbs.projectToCurve = function(crv, pt, guess) {
+  
+}
 	  
 	  //approximate length, unimplemented
 nurbs.crvLength=function(crv) {
@@ -290,10 +219,12 @@ nurbs.addPoint = function(crv, pt) {
 		  }
 	  }
 	  crv.knots.push(end+inc);
-	  for( i=crv.knots.length-2;i>crv.knots.length-crv.degree-2;--i) 
-		crv.knots[i] = end+inc;			  
-	  for( i=0;i<crv.knots.length;++i) 
-		crv.knots[i] /= end+inc;
+	  for( i=crv.knots.length-2;i>crv.knots.length-crv.degree-2;--i) {
+      crv.knots[i] = end+inc;			  
+    }
+	  for( i=0;i<crv.knots.length;++i) {
+      crv.knots[i] /= end+inc;
+    }
 	}
 }
 
