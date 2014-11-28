@@ -1,7 +1,7 @@
 define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],function(nurbs, modeler, glMatrix, vboMesh, aabb, exports) {
   "use strict";
   var vec3 = glMatrix.vec3;
-  
+  var vec4 = glMatrix.vec4;
   var basicCurves = exports;
   
   var Curve = function() {
@@ -106,9 +106,91 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     return obj;
   }
   
-  basicCurve.circlePtRadius = function(center, radius, plane) {
-    
-  }
+  basicCurves.circlePtRadius = (function() {
+    var dir1 = vec3.create();
+    var dir2 = vec3.create();
+    return function circlePtRadius(center, radius, plane) {
+      if(plane === undefined) { plane = modeler.currWindow.plane; }
+      //get axes
+      if(plane[0] < 0.99) {
+        vec3.cross(dir1,plane,[1,0,0]);
+        
+      } else if(plane[1] <  0.99) {
+        vec3.cross(dir1,plane,[0,1,0]);
+        
+      } else {
+        vec3.cross(dir1,plane,[0,0,1]);
+      }
+      
+      vec3.normalize(dir1,dir1);
+      vec3.cross(dir2,dir1,plane);
+      
+      vec3.scale(dir1,dir1,radius);
+      vec3.scale(dir2,dir2,radius);
+      
+      var crv = {};
+      var oddWeight = Math.sqrt(2)/2;
+      crv.controlPts = [];
+      var pt1 = vec4.create();
+      vec3.add(pt1,center,dir1);
+      pt1[3] = 1.0;
+      crv.controlPts.push(pt1);
+      
+      var pt = vec4.create();
+      vec3.add(pt,center,dir1);
+      vec3.add(pt,pt,dir2);
+      vec3.scale(pt,pt,oddWeight);
+      pt[3] = oddWeight;
+      crv.controlPts.push(pt)
+      
+      pt = vec4.create();
+      vec3.add(pt,center,dir2);
+      pt[3] = 1.0;
+      crv.controlPts.push(pt);
+      
+      pt = vec4.create();
+      vec3.add(pt,center,dir2);
+      vec3.sub(pt,pt, dir1);
+      vec3.scale(pt,pt,oddWeight);
+      pt[3] = oddWeight;
+      crv.controlPts.push(pt);
+      
+      pt = vec4.create();
+      vec3.sub(pt, center, dir1);
+      pt[3] = 1.0;
+      crv.controlPts.push(pt);
+      
+      pt = vec4.create();
+      vec3.sub(pt, center, dir1);
+      vec3.sub(pt, pt, dir2);
+      vec3.scale(pt,pt,oddWeight);
+      pt[3] = oddWeight;
+      crv.controlPts.push(pt);
+      
+      pt = vec4.create();
+      vec3.sub(pt, center, dir2);
+      pt[3] = 1.0;
+      crv.controlPts.push(pt);
+      
+      pt = vec4.create();
+      vec3.add(pt, center, dir1);
+      vec3.sub(pt, pt, dir2);
+      vec3.scale(pt,pt,oddWeight);
+      pt[3] = oddWeight;
+      crv.controlPts.push(pt);
+      
+      crv.controlPts.push(pt1);
+      
+      crv.degree = 2;
+      crv.knots = [0,0,0,.25,.25,.5,.5,.75,.75,1,1,1];
+      
+      var obj = new Curve();
+      obj.rep = crv;
+      
+      obj.updateMesh();
+      return obj;
+    };
+  })();
   
   basicCurves.commands = commands;
 });
