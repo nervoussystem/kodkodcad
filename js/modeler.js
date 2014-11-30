@@ -70,13 +70,14 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     var pts = [];
     for(var i=0;i<10;++i) {
       //vboMesh.addVertex(testObj.display,[Math.cos(Math.PI*2*i/20),Math.sin(Math.PI*2*i/20),0]);
-      pts.push([Math.cos(Math.PI*2*i/10),Math.sin(Math.PI*2*i/10),0]);
+      pts.push([Math.cos(Math.PI*2*i/10),Math.sin(Math.PI*2*i/10),i*.1]);
     }
     //vboMesh.buffer(testObj.display, gl);
     //modeler.objects.push(testObj);
     var testObj = basicCurves.curveFromPts(pts);
     testObj.updateMesh();
     modeler.objects.push(testObj);
+    modeler.objects.push(basicCurves.circlePtRadius([0,1,0],1.3));
   }
   
   modeler.redraw = function() {
@@ -166,6 +167,16 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   modeler.selectPoint = function(pt) {
     var ray = mouseRay();
     //snap
+    var projMatrix = mat4.create();
+    mat4.mul(projMatrix, currWindow.camera.cameraMatrix, modeler.pMatrix);
+    for(var i=0;i<modeler.objects.length;++i) {
+      var obj = modeler.objects[i];
+      if(obj.type === modeler.CURVE) {
+        //project to screen
+        basicCurves.transform(obj, projMatrix);
+        
+      }
+    }
     
     //if no snap project to plane
     intersect.rayPlane(pt,ray[0],ray[1], currWindow.plane);

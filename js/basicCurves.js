@@ -98,6 +98,15 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     }
   ];
   
+  basicCurves.transform = function(crv, mat) {
+    for(var i=0;i<crv.rep.controlPts.length;++i) {
+      var pt = crv.rep.controlPts[i];
+      vec4.projectDown(pt,pt);
+      vec3.transformMat4(pt, pt, mat);
+      vec4.unprojectDown(pt,pt);
+    }
+  }
+  
   basicCurves.curveFromPts = function(pts,degree) {
     //check for closed curve
     var crv = nurbs.createCrv(pts,degree);

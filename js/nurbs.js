@@ -4,6 +4,7 @@ var vec4 = glMatrix.vec4;
 var vec3 = glMatrix.vec3;
 //check for 0
 vec4.projectDown=function(a,b){var d=1.0/a[3];if(!b) {b=vec3.create();} b[0]=a[0]*d;b[1]=a[1]*d;b[2]=a[2]*d;return b;};
+vec4.unprojectDown=function(a,b){var d=a[3];if(!b) {b=vec3.create();} b[0]=a[0]*d;b[1]=a[1]*d;b[2]=a[2]*d;return b;};
 //optimize to avoid multiplications with no b
 //vec4.fromVec3=function(a,b){if(!b) b=1;var c=new Float32Array(4);c[0]=a[0]*b;c[1]=a[1]*b;c[2]=a[2]*b;c[3]=b;return c;};
 vec4.fromVec3=function(out,a){out = out || vec4.create();out[0]=a[0];out[1]=a[1];out[2]=a[2];out[3]=1;return out;};
