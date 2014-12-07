@@ -4,8 +4,13 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   var mat4 = glMatrix.mat4;
   var vec4 = glMatrix.vec4;
   var vec3 = glMatrix.vec3;
+  var vec2 = glMatrix.vec2;
   var modeler = exports;
   
+  //util
+  Math.clamp = function(x,min,max) {
+    return Math.max(min, Math.min(x,max));
+  }
   /*
     CONSTANTS
   */
@@ -166,20 +171,46 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   
   modeler.selectPoint = function(pt) {
     var ray = mouseRay();
+    
     //snap
+    var snap = false;
     var projMatrix = mat4.create();
-    mat4.mul(projMatrix, currWindow.camera.cameraMatrix, modeler.pMatrix);
+    mat4.mul(projMatrix, modeler.pMatrix,currWindow.camera.cameraMatrix);
+    var invMatrix = mat4.create();
+    mat4.invert(invMatrix, projMatrix);
+
+    //near
+    //snapping distance
+    var minDist = 100;
+    //homogenize mouse coordinates
+    var mousePtH = [mouseHandler.mouseX/currWindow.width*2-1,-mouseHandler.mouseY/currWindow.height*2+1,0];
+    var mousePt = [mouseHandler.mouseX,mouseHandler.mouseY,0];
+    var testPt = vec3.create();
     for(var i=0;i<modeler.objects.length;++i) {
       var obj = modeler.objects[i];
-      if(obj.type === modeler.CURVE) {
+      if(obj.type == modeler.CURVE) {
         //project to screen
         basicCurves.transform(obj, projMatrix);
         
+        var u = basicCurves.projectToCurve2D(obj,mousePtH, testPt);
+        basicCurves.transform(obj, invMatrix);
+        //dehomogenize for distance test
+        testPt[0] = (testPt[0]+1)*currWindow.width*0.5;
+        testPt[1] = -(testPt[1]-1)*currWindow.height*0.5;
+        var dist = vec2.sqrDist(testPt,mousePt);
+        if(dist < minDist) {
+          minDist = dist;
+          basicCurves.evaluate(obj, u, pt);
+          snap = true;
+        }
+        obj.updateMesh();
       }
     }
     
     //if no snap project to plane
-    intersect.rayPlane(pt,ray[0],ray[1], currWindow.plane);
+    if(!snap) {
+      intersect.rayPlane(pt,ray[0],ray[1], currWindow.plane);
+    }
   }
   
   var mouseRay = (function() {

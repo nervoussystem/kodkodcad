@@ -57,11 +57,11 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     "parameters": [
         {"name":"center",
          "type": "point"},
-        {"name":"q",
+        {"name":"radius",
          "type": "number"},
         {"name": "plane",
          "type": "plane",
-         "default": [0,0,1]}
+         "default": function() { return modeler.currWindow.plane;} }
         
       ],
       "start" : function() {
@@ -99,12 +99,26 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
   ];
   
   basicCurves.transform = function(crv, mat) {
-    for(var i=0;i<crv.rep.controlPts.length;++i) {
+    var len = crv.rep.controlPts.length;
+    if(crv.isClosed) {
+      len -= 1;
+    }
+    for(var i=0;i<len;++i) {
       var pt = crv.rep.controlPts[i];
       vec4.projectDown(pt,pt);
       vec3.transformMat4(pt, pt, mat);
       vec4.unprojectDown(pt,pt);
     }
+  }
+  
+  basicCurves.projectToCurve2D = function(crv, pt, out) {
+    var u = nurbs.projectToCurve2D(crv.rep,  pt);
+    nurbs.evaluateCrv(crv.rep, u, out);
+    return u;
+  }
+
+  basicCurves.evaluate = function(crv,u, out) {
+    nurbs.evaluateCrv(crv.rep, u, out);
   }
   
   basicCurves.curveFromPts = function(pts,degree) {
@@ -122,11 +136,9 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
       if(plane === undefined) { plane = modeler.currWindow.plane; }
       //get axes
       if(plane[0] < 0.99) {
-        vec3.cross(dir1,plane,[1,0,0]);
-        
+        vec3.cross(dir1,plane,[1,0,0]);        
       } else if(plane[1] <  0.99) {
-        vec3.cross(dir1,plane,[0,1,0]);
-        
+        vec3.cross(dir1,plane,[0,1,0]);        
       } else {
         vec3.cross(dir1,plane,[0,0,1]);
       }
@@ -195,7 +207,7 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
       
       var obj = new Curve();
       obj.rep = crv;
-      
+      obj.isClosed = true;
       obj.updateMesh();
       return obj;
     };

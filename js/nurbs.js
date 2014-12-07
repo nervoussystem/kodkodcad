@@ -2,6 +2,7 @@ define(["gl-matrix-min"], function(glMatrix) {
 "use strict";
 var vec4 = glMatrix.vec4;
 var vec3 = glMatrix.vec3;
+var vec2 = glMatrix.vec2;
 //check for 0
 vec4.projectDown=function(a,b){var d=1.0/a[3];if(!b) {b=vec3.create();} b[0]=a[0]*d;b[1]=a[1]*d;b[2]=a[2]*d;return b;};
 vec4.unprojectDown=function(a,b){var d=a[3];if(!b) {b=vec3.create();} b[0]=a[0]*d;b[1]=a[1]*d;b[2]=a[2]*d;return b;};
@@ -124,9 +125,9 @@ nurbs.setDegree = function(deg) {
 }
 	
 nurbs.evaluateCrv = (function() {
-    var evalPt = vec4.create();
+  var evalPt = vec4.create();
 	var tempPt = vec4.create();
-    return function evaluateCrv(crv,u,pt) {
+  return function evaluateCrv(crv,u,pt) {
     	var currKnot = nurbs.findKnot(crv.knots,u,crv.degree);
     	vec4.zero(evalPt);
     	nurbs.basisFunctions(crv.knots,crv.degree,currKnot, u,nurbs.basisFuncs);
@@ -142,7 +143,7 @@ nurbs.crvDerivatives = (function() {
 	var hPts = new Array(nurbs.MAX_DEGREE+1);
 	var derivesW = new Array(nurbs.MAX_DEGREE+1);
 	var i,j,der, currPt = vec3.create();
-	for(i=0;i<hPts.length;++i) hPts[i] = vec4.create();
+	//for(i=0;i<hPts.length;++i) hPts[i] = vec4.create();
 	for(i=0;i<derivesW.length;++i) derivesW[i] = vec4.create();
 	return function(crv,u,k,out) {
 		if(out === undefined) {
@@ -150,15 +151,15 @@ nurbs.crvDerivatives = (function() {
 			for(i=0;i<out.length;++i) out[i] = vec3.create();
 		}
 		var currKnot = nurbs.findKnot(crv.knots,u,crv.degree);
-		for(i=0;i<=crv.degree;++i) {
-			vec4.copy(hPts[i], crv.controlPts[currKnot-crv.degree+i]);
-		}
-		basFunc = nurbs.deriveBasisFunctions(crv.knots,crv.degree,currKnot, u, k);
+		//for(i=0;i<=crv.degree;++i) {
+		//	vec4.copy(hPts[i], crv.controlPts[currKnot-crv.degree+i]);
+		//}
+		var basFunc = nurbs.deriveBasisFunctions(crv.knots,crv.degree,currKnot, u, k);
 		for(i=0;i<=k;++i) {
 			der = derivesW[i];
 			vec4.zero(der);
 			for(j=0;j<=crv.degree;++j) {
-				vec4.scaleAndAdd(der,der,hPts[j],basFunc[i][j]);
+				vec4.scaleAndAdd(der,der,crv.controlPts[currKnot-crv.degree+j],basFunc[i][j]);
 			}
 		}
 		vec3.set(out[0],0,0,0);
@@ -173,10 +174,6 @@ nurbs.crvDerivatives = (function() {
 		return out;
 	};
 })();	 
-
-nurbs.projectToCurve = function(crv, pt, guess) {
-  
-}
 	  
 	  //approximate length, unimplemented
 nurbs.crvLength=function(crv) {
@@ -433,7 +430,7 @@ nurbs.projectToCurve = function(crv,pt) {
 	do {
 		estimateU = nextU;
 		nextU = projectCrvNewton(crv,estimateU,pt);
-	} while(Math.abs(estimateU-nextU > 0.01))
+	} while(Math.abs(estimateU-nextU > 0.001))
 	return nextU;
 }
 
@@ -479,6 +476,63 @@ var projectEstimate = (function() {
 				}
 
 			}
+		}
+		return minU;
+	}
+})();
+
+
+nurbs.projectToCurve2D = function(crv,pt) {
+	var estimateU = projectEstimate2D(crv,pt);
+	var nextU = estimateU;
+	var domain = nurbs.domain(crv);
+	do {
+		estimateU = nextU;
+		nextU = projectCrvNewton2D(crv,estimateU,pt);
+    //constrain value
+    nextU = Math.clamp(nextU, domain[0], domain[1]);
+    
+	} while(Math.abs(estimateU-nextU > 0.001))
+	return nextU;
+}
+
+
+var projectCrvNewton2D = (function() {
+	var ptDerivatives = new Array(3);
+	var tanEstimate = vec2.create();
+	for(var i=0;i<ptDerivatives.length;++i) ptDerivatives[i] = vec2.create();
+	return function projectCrvNewton2D(crv,u,pt) {
+		nurbs.crvDerivatives(crv,u,2,ptDerivatives);
+		vec2.sub(tanEstimate, ptDerivatives[0], pt);
+		var term1 = vec2.dot(tanEstimate, ptDerivatives[1]);
+		var term2 = vec2.dot(tanEstimate,ptDerivatives[2])+vec2.sqrLen(ptDerivatives[1]);
+     
+    var newU = u-term1/term2;
+    
+		return u-term1/term2;
+	}
+})();
+
+//this should use convex hull condition to narrow down results
+var projectEstimate2D = (function() {
+	var pt2 = vec2.create();
+	return function projectEstimate2D(crv,pt) { 
+		var u;
+		var minDist = 9e9;
+		var minU = 0;
+		var dist;
+    var domain = nurbs.domain(crv);
+    var samples = crv.controlPts.length*5;
+    var domainSpan = domain[1]-domain[0];
+    
+		for(var i=0;i<samples;++i) {
+      u = domain[0]+i/samples*domainSpan;
+      nurbs.evaluateCrv(crv,u,pt2);
+      dist = vec2.sqrDist(pt,pt2);
+      if(dist < minDist) {
+        minDist = dist;
+        minU = u;
+      }
 		}
 		return minU;
 	}
