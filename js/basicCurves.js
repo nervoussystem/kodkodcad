@@ -19,7 +19,12 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     modeler.shader.attribs.vertexNormal.disable();
     modeler.gl.vertexAttrib3fv(modeler.shader.attribs.vertexNormal.location,[0,0,0]);
     //do color
-    modeler.shader.uniforms.matColor.set([0.0,0.0,0.0,1.0]);
+    if(this.selected) {
+      //modeler.selectedColor
+      modeler.shader.uniforms.matColor.set([1.0,1.0,0.0,1.0]);
+    } else {
+      modeler.shader.uniforms.matColor.set([0.0,0.0,0.0,1.0]);
+    }
     
     modeler.shader.attribs.vertexPosition.set(this.display.vertexBuffer);
     modeler.gl.drawArrays(modeler.gl.LINE_STRIP,0,this.display.numVertices);
@@ -54,46 +59,78 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
   var commands = [
     {
     "name":"Circle",
-    "parameters": [
-        {"name":"center",
-         "type": "point"},
-        {"name":"radius",
-         "type": "number"},
-        {"name": "plane",
+    "parameters": {
+        "center" :
+         {"type": "point"},
+        "radius" : 
+          {"type": "number",
+          "fromPt": function(pt,cmd) {
+            if(cmd.parameters.center.value) {
+              var center = cmd.parameters.center.value;
+              //project pt to plane
+              var dir = vec3.create();
+              vec3.sub(dir, pt, center);
+              var dist = vec3.sqrDist(pt,center);
+              var perpDist = vec3.dot(cmd.parameters.plane.value, dir);
+              return Math.sqrt(dist-perpDist*perpDist);
+            }
+          }},
+        "plane" :
+          {
          "type": "plane",
          "default": function() { return modeler.currWindow.plane;} }
         
-      ],
-      "start" : function() {
+      },
+      "start" : function(currCommand) {
         
       },
-      "preview" : function() {
-      
+      "preview" : function(currCommand) {
+        //CHANGE: efficiency
+        if(currCommand.parameters.center.value && currCommand.parameters.radius.value) {
+          var circle = basicCurves.circlePtRadius(currCommand.parameters.center.value, currCommand.parameters.radius.value, currCommand.parameters.plane.value);
+          circle.updateMesh();
+          circle.draw();
+        }
       },
-      "finish" : function() {
-      
+      "finish" : function(currCommand) {
+        var circle = basicCurves.circlePtRadius(currCommand.parameters.center.value, currCommand.parameters.radius.value, currCommand.parameters.plane.value);
+        circle.updateMesh();
+        
+        modeler.objects.push(circle);
       }
     },
     {
       "name":"Curve",
-      "parameters": [
-        {"name":"points",
+      "parameters": {
+        "points" : {
          "type":"point",
          "isList": true},
-        {"name":"degree",
+        "degree": {
          "type":"integer",
          "default": 3}
-      ],
+      },
       "start" : function(cmd) {
-        cmd.points = [];
-      },
-      "preview" : function(cmd) {
-        var crv = nurbs.createCrv(cmd.pts,cmd.degree);
-        return crv;
-      },
-      "finish" : function(cmd) {
-        var newCurve = new Curve();
         
+      },
+      "preview" : function(currCommand) {
+        var pts = currCommand.parameters.points.value.slice(0);
+        if(pts.length > 0) {
+          pts.push(modeler.selectedPt);
+          //var crv = nurbs.createCrv(currCommand.parameters.points.value,currCommand.parameters.degree.value);
+          var crv = basicCurves.curveFromPts(pts, currCommand.parameters.degree.value);
+          crv.updateMesh();
+          crv.draw();
+        }
+      },
+      "finish" : function(currCommand) {
+        if(currCommand.parameters.points.value.length > 1) {
+          var newCurve = basicCurves.curveFromPts(currCommand.parameters.points.value,currCommand.parameters.degree.value);
+          
+          //where do I update drawing mesh, perhaps with a flag
+          newCurve.updateMesh();
+          
+          modeler.objects.push(newCurve);
+        }
       }
     }
   ];
@@ -123,6 +160,7 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
   
   basicCurves.curveFromPts = function(pts,degree) {
     //check for closed curve
+    degree = Math.min(degree, pts.length-1);
     var crv = nurbs.createCrv(pts,degree);
     var obj = new Curve();
     obj.rep = crv;

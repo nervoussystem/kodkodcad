@@ -30,15 +30,25 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   
   var previousPt = vec3.create();
   var selectedPt = vec3.create();
+  modeler.selectedPt = selectedPt;
   modeler.pMatrix = mat4.create();
+  
   
   var doRedraw = true;
   modeler.aabbTree = new aabb.AABBNode();
+  
+  var isSelectingPoint = false;
+  function finishPointSelection(pt) {
+  }
+  function pointSelection(pt) {
+    
+  }
   
   /*
     setup drawing environments
   */
   var canvas = doc.getElementById("mainCanvas");
+  var commandDiv = doc.getElementById("command");
   var gl = webgl.init(canvas);
   modeler.gl = gl;
   modeler.shader = glShader.loadShader(gl,"shaders/phongSimple.vert","shaders/phongSimple.frag");
@@ -60,6 +70,10 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   var currWindow = mainWindow;
   modeler.currWindow = mainWindow;
   
+  var currCommand;
+  var currParam;
+  var currParamDiv;
+  
   modeler.step = function() {
     if(doRedraw) {
       modeler.redraw();
@@ -72,6 +86,8 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     //var testObj = {};
     //testObj.type = modeler.CURVE;
     //testObj.display = vboMesh.create32(gl);
+    document.addEventListener("keyup", keyPress, false);
+    loadCommands(basicCurves.commands);
     var pts = [];
     for(var i=0;i<10;++i) {
       //vboMesh.addVertex(testObj.display,[Math.cos(Math.PI*2*i/20),Math.sin(Math.PI*2*i/20),0]);
@@ -118,6 +134,8 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
 
      modeler.shader.uniforms.matColor.set([.5,.5,.5,1.0]);
      for(var j=0, numObjects = modeler.objects.length; j<numObjects; ++j) {
+      //do bounding box culling
+      
         var obj = modeler.objects[j];
         obj.draw();
         /*
@@ -143,8 +161,13 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     }
     
     //draw selected point
-    drawPoints(selectedPt);
+    if(isSelectingPoint) {
+      drawPoints(selectedPt);
+    }
     
+    if(currCommand) {
+      currCommand.preview(currCommand);
+    }
     modeler.shader.end();
   }
   
@@ -164,11 +187,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     modeler.shader.attribs.vertexPosition.set(pointBuffer);
     gl.drawArrays(gl.POINTS,0,pts.length/3);
   }
-  
-  modeler.runCommand = function(cmd) {
     
-  }
-  
   modeler.selectPoint = function(pt) {
     var ray = mouseRay();
     
@@ -181,7 +200,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
 
     //near
     //snapping distance
-    var minDist = 100;
+    var minDist = 100; //10 pixels
     //homogenize mouse coordinates
     var mousePtH = [mouseHandler.mouseX/currWindow.width*2-1,-mouseHandler.mouseY/currWindow.height*2+1,0];
     var mousePt = [mouseHandler.mouseX,mouseHandler.mouseY,0];
@@ -189,6 +208,8 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     for(var i=0;i<modeler.objects.length;++i) {
       var obj = modeler.objects[i];
       if(obj.type == modeler.CURVE) {
+        //check bounding box first
+        
         //project to screen
         basicCurves.transform(obj, projMatrix);
         
@@ -231,9 +252,9 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
       vec4.transformMat4(pt1, pt1, invMatrix);
       vec4.transformMat4(pt2, pt2, invMatrix);
       //pt1[2] = -1.0;
-      pt1[3] = 0.0;
+      pt1[3] = 1.0;
       //pt2[2] = -1.0;
-      pt2[3] = 0.0;
+      pt2[3] = 1.0;
       mat4.invert(invMatrix,currWindow.camera.cameraMatrix);
       vec4.transformMat4(pt1, pt1, invMatrix);
       vec4.transformMat4(pt2, pt2, invMatrix);
@@ -251,40 +272,265 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     var v0 = vec3.create(),
       v1 = vec3.create(),
       v2 = vec3.create();
-    for(var i=0,l=vbo.numIndices;i<l;) {
-      i0 = vbo.indexData[i++];
-      i1 = vbo.indexData[i++];
-      i2 = vbo.indexData[i++];
-      vboMesh.getVertex(v0,vbo,i0);
-      vboMesh.getVertex(v1,vbo,i1);
-      vboMesh.getVertex(v2,vbo,i2);
+    var minDepth = 9e9;
+
+    var selDistSq = 100;
+    var projMatrix = mat4.create();
+    mat4.mul(projMatrix, modeler.pMatrix,currWindow.camera.cameraMatrix);
+    var invMatrix = mat4.create();
+    mat4.invert(invMatrix, projMatrix);
+
+    var mousePtH = [mouseHandler.mouseX/currWindow.width*2-1,-mouseHandler.mouseY/currWindow.height*2+1,0];
+    var mousePt = [mouseHandler.mouseX,mouseHandler.mouseY,0];
+    var testPt = vec3.create();
+    for(var i=0, len=modeler.objects.length;i<len;++i) {
+      var obj = modeler.objects[i];
+      if(obj.type == modeler.CURVE) {
+        //check bounding box first
         
-        var intersection  = rayTriIntersect(camPos, ray, v0, v1, v2);
-        if(intersection) {
-            if(intersection[0] < minDepth) {
-                minDepth = intersection[0];
-                vec3.scale(pt,v1,intersection[1]);
-                vec3.scaleAndAdd(pt,pt,v2,intersection[2]);
-                vec3.scaleAndAdd(pt,pt,v0,1.0-intersection[1]-intersection[2]);
-                if(norm) {
-                  vboMesh.getNormal(v0,vbo,i0);
-                  vboMesh.getNormal(v1,vbo,i1);
-                  vboMesh.getNormal(v2,vbo,i2);
-                  vec3.scale(norm,v1,intersection[1]);
-                  vec3.scaleAndAdd(norm,norm,v2,intersection[2]);
-                  vec3.scaleAndAdd(norm,norm,v0,1.0-intersection[1]-intersection[2]);                
-                }
-            }
+        //project to screen
+        basicCurves.transform(obj, projMatrix);
+        
+        var u = basicCurves.projectToCurve2D(obj,mousePtH, testPt);
+        //dehomogenize for distance test
+        testPt[0] = (testPt[0]+1)*currWindow.width*0.5;
+        testPt[1] = -(testPt[1]-1)*currWindow.height*0.5;
+        var dist = vec2.sqrDist(testPt,mousePt);
+        if(dist < selDistSq) {
+          basicCurves.evaluate(obj, u, testPt);
+          if(testPt[2] > -1 && testPt[2] < minDepth) {
+            closestObj = obj;
+            minDepth = testPt[2];
+          }
         }
+        basicCurves.transform(obj, invMatrix);
+      }
     }
-    if(minDepth < 1e8)
-        return pt;
-    else return null;
+    var closestObj;
+    if(closestObj) {
+        return closestObj;
+    } else return null;
   }
   
+  function loadCommands(cmds) {
+    var cmdDiv = document.getElementById('commands');
+    //CHANGE: avoid redraw for each command
+    for(var i=0,len=cmds.length;i<len;++i) {
+      var cmd = cmds[i];
+
+      var newButton = document.createElement('div');
+      newButton.classList.add('commandButton');
+      newButton.addEventListener('click', (function(c) {return function() {runCommand(c);} })(cmd) , false);
+      newButton.innerHTML = cmd.name;
+      cmdDiv.appendChild(newButton);
+    }
+  }
+  
+  function cancelCommand() {
+    //close command window
+    isSelectingPoint = false;    
+    currCommand = undefined;
+    currParam = undefined;
+    commandDiv.innerHTML = "";
+  }
+  
+  function runCommand(cmd) {
+    cancelCommand();
+    currCommand = cmd;
+    //setup gui
+    commandDiv.innerHTML = "";
+    //put everything in here to avoid multiple draws
+    var cmdDiv = document.createElement('div');
+    cmdDiv.classList.add("command");
+    var tempDiv, innerDiv;
+    tempDiv = document.createElement('div');
+    tempDiv.classList.add("name");
+    tempDiv.innerHTML = cmd.name;
+    cmdDiv.appendChild(tempDiv);
+    
+    var paramDiv;
+    var firstParam = undefined;
+    for(var name in cmd.parameters) {
+      var param = cmd.parameters[name];
+      if(firstParam === undefined) { firstParam = name; }
+      
+      paramDiv = document.createElement('div');
+      paramDiv.classList.add("param");
+      
+      tempDiv = document.createElement('div');
+      tempDiv.classList.add("label");
+      tempDiv.innerHTML = name;
+      
+      paramDiv.appendChild(tempDiv);
+      
+      if(param.isList) {
+        tempDiv = document.createElement('div');
+        tempDiv.classList.add("paramList");
+        tempDiv.innerHTML = "<ul><li>add</li></ul>";
+        
+        tempDiv.addEventListener("click", (function (p,d) { return function() {getCmdParameter(p, d);} })(param,tempDiv), false);
+        paramDiv.appendChild(tempDiv);
+      } else {
+        if(param.type == "number" || param.type == "integer") {
+          tempDiv = document.createElement('input');
+          tempDiv.type = "text";
+          tempDiv.classList.add("paramInput");
+          if(param.default) {
+            if(typeof(param.default) == "function") {
+              tempDiv.value = param.default();
+            } else {
+              tempDiv.value = param.default;
+            }
+          }
+          
+          tempDiv.addEventListener("click", (function(p,d) {return function() {getCmdParameter(p, d);} })(param,tempDiv), false);
+          tempDiv.addEventListener("change", (function(p,v) { return function() {setCmdParameter(p, this.value);} })(param), false);
+          
+          paramDiv.appendChild(tempDiv);
+          
+        } else {
+          tempDiv = document.createElement('div');
+          tempDiv.classList.add("paramInput");
+          
+          tempDiv.addEventListener("click", (function(p,d) {return function() {getCmdParameter(p, d);} })(param,tempDiv), false);
+          paramDiv.appendChild(tempDiv);
+        }
+      }
+      cmdDiv.appendChild(paramDiv);
+      
+      //set parameter value
+      if(param.default) {
+        if(typeof(param.default) == "function") {
+          param.value = param.default();
+        } else {
+          param.value = param.default;
+        }
+      } else {
+        if(param.isList) {
+          param.value = undefined;
+        } else {
+          param.value = undefined;
+        }
+      }
+    }
+    commandDiv.appendChild(cmdDiv);
+    cmd.start();
+    //check for preselection
+    
+    //start selecting first param
+    getCmdParameter(cmd.parameters[firstParam],cmdDiv.children[1].children[1]);
+  }
+  
+  function getCmdParameter(param, target) {
+    //QUESTION: should I assert that param is member of currCommand
+    
+    //defocus previous parameter
+    if(currParamDiv) {
+      currParamDiv.classList.remove("focus");
+    }
+    
+    target.classList.add("focus");
+    target.focus();
+    currParam = param;
+    currParamDiv = target;
+    if(param.type == "point") {
+      isSelectingPoint = true;
+      if(param.isList) {
+        param.value = [];
+        
+        pointSelection  = function(pt) {
+          //param.value[param.value.length-1] = pt;          
+        }
+        
+        finishPointSelection  = function(pt) {
+          param.value.push(vec3.clone(pt) );
+          //param.value.push(selectedPt);
+
+          var listItem = document.createElement('li');
+          //CHANGE: use option value for precision
+          listItem.innerHTML = pt[0].toFixed(3) + ", " + pt[1].toFixed(3) + ", " + pt[2].toFixed(3);
+          target.children[0].appendChild(listItem);
+
+        }
+      } else {
+        pointSelection  = function(pt) {
+          param.value = pt;
+          //CHANGE: use option value for precision
+          target.innerHTML = pt[0].toFixed(3) + ", " + pt[1].toFixed(3) + ", " + pt[2].toFixed(3);
+        }
+        
+        finishPointSelection  = function(pt) {
+          param.value = vec3.clone(pt);
+          //CHANGE: use option value for precision
+          target.innerHTML = pt[0].toFixed(3) + ", " + pt[1].toFixed(3) + ", " + pt[2].toFixed(3);
+          isSelectingPoint = false;
+          nextParameter();
+        }
+      }
+    } else if(param.type == "object") {
+    
+    } else if(param.type == "number") {
+      if(param.fromPt) {
+        isSelectingPoint = true;
+        pointSelection  = function(pt) {
+          param.value = param.fromPt(pt,currCommand);
+          //CHANGE: use option value for precision
+          //target.value = param.value;
+        }
+        
+        finishPointSelection  = function(pt) {
+          isSelectingPoint = false;
+          target.value = param.value;
+          nextParameter();
+        }
+      }
+    }
+  }
+  
+  function setCmdParameter(param, val) {
+    param.value = val;
+  }
+
   /*
     mouse interactions
   */
+  
+  mouseHandler.mouseClicked = function(event) {
+    //check status
+    if(isSelectingPoint) {
+      finishPointSelection(selectedPt);
+    } else {
+      var obj = modeler.selectObject();
+      if(obj != null) {
+        if(event.shiftKey) {        
+          if(modeler.selection.indexOf(obj) == -1) {
+            obj.selected = true;
+            modeler.selection.push(obj);
+          }
+        } else if(event.ctrlKey) {
+          var index = modeler.selection.indexOf(obj);
+          if(index != -1) {
+            modeler.selection.splice(index,1);
+            obj.selected = false;
+          }
+        } else {
+          for(var i=0, len = modeler.selection.length; i<len;++i) {
+            modeler.selection[i].selected = false;
+          }
+          modeler.selection[0] = obj;
+          modeler.selection.length = 1;
+          obj.selected = true;
+        }
+      } else {
+        for(var i=0, len = modeler.selection.length; i<len;++i) {
+          modeler.selection[i].selected = false;
+        }
+        if(!event.shiftKey && !event.ctrlKey) {
+          modeler.selection.length = 0;
+        }
+      }
+    }
+  }
   
   mouseHandler.mouseDragged = function(event) {
     if(mouseHandler.mouseButton == 3) {
@@ -305,9 +551,90 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   }
   
   mouseHandler.mouseMoved = function(event) {
-    modeler.selectPoint(selectedPt);
+    if(isSelectingPoint) {
+      modeler.selectPoint(selectedPt);
+      pointSelection(selectedPt);
+      //do something with the point
+      
+    }
   }
   
+  function keyPress(event) {
+    switch(event.keyCode) {
+      case 13:
+        pressEnter();
+        break;
+      case 27:
+        cancelCommand();
+        break;
+    }
+  }
+  
+  function pressEnter() {
+    if(currCommand) {
+      if(currParam && currParam.isList) {
+        nextParameter();
+      } else {
+        var isDone = true;
+        for(var key in currCommand.parameters) {
+          if(currCommand.parameters[key].value === undefined) {
+            isDone = false;
+          }
+        }
+        if(isDone) {
+          finishCommand();
+        } else {
+          nextParameter();
+        }
+      }
+      //check if all parameters are filled
+      //go to next param
+      
+      //find next unfilled param
+      
+    }
+  }
+  
+  function nextParameter() {
+    isSelectingPoint = false;
+    var firstEmpty;
+    var firstEmptyI;
+    var currParamFound = false;
+    var i=0;
+    for(var key in currCommand.parameters) {    
+      //check if empty
+      if(currCommand.parameters[key].value === undefined) {
+        if(!currParamFound) {
+          if(firstEmpty === undefined) {
+            firstEmpty = currCommand.parameters[key];
+            firstEmptyI = i;
+          }
+        } else {
+          var paramDiv = commandDiv.children[0].children[i+1].children[1];
+          getCmdParameter(currCommand.parameters[key],paramDiv);
+          return;
+        }
+      }
+      if(currCommand.parameters[key] === currParam) {
+        currParamFound = true;
+      }
+      i++;
+    }
+    if(firstEmpty === undefined) {
+      finishCommand();
+    } else {
+      var paramDiv = commandDiv.children[firstEmptyI+1].children[1];
+      getCmdParameter(firstEmpty,paramDiv);
+    }
+  }
+  
+  function finishCommand() {
+    isSelectingPoint = false;
+    currCommand.finish(currCommand);
+    currCommand = undefined;
+    currParam = undefined;
+    commandDiv.innerHTML = "";
+  }
   
   return modeler;
 });

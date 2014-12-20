@@ -15,6 +15,7 @@ void main(void) {
     vec3 materialDiffuseColor = vec3(matColor);
     vec3 ambientLightWeighting = ambientLightingColor;
     vec3 normal = normalize(vTransformedNormal);
+    float normNorm = length(normal);
     float diffuseLightBrightness = max(dot(normal,lightingDirection),0.0);
     vec3 diffuseLightWeighting = diffuseLightBrightness*directionalDiffuseColor;
     vec3 r = reflect(lightingDirection, normal);
@@ -24,11 +25,11 @@ void main(void) {
   
     vec3 spec = vec3(.3,.3,.3)*pow(max(0.0,dot(r, v)), materialShininess);
                       
-    gl_FragColor = vec4(
+    gl_FragColor = normNorm*vec4(
                     ambientLightWeighting * materialDiffuseColor
                     + materialDiffuseColor * diffuseLightWeighting
                     + spec * specularColor
-                    , alpha);
+                    , alpha)+(1.0-normNorm)*matColor;
 }
 
 

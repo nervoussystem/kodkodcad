@@ -1,0 +1,60 @@
+body {
+  font-family: sans-serif;
+}
+
+.title{
+font-size: 20pt;
+margin: 15px 0;
+}
+
+.commandButton {
+float: left;
+/* height: 50px; */
+padding: 2px;
+background-color: #ccc;
+text-transform: lowercase;
+padding: 5px;
+font-size: 11pt;
+margin: 3px;
+border-radius: 6px;
+cursor: pointer;
+}
+
+.commandButton:hover {
+background-color:#ddd;
+}
+
+.paramInput {
+  border: 1px solid #666;
+  min-width: 100px;
+  height: 15px;
+}
+
+.paramInput.focus {
+  background-color: #f66;
+}
+
+.paramList.focus {
+  background-color: #f66;
+}
+
+.paramList {
+  border: 1px solid #666;
+  min-width: 100px;
+  min-height: 15px;
+  max-height: 100px;
+  overflow: scroll;
+}
+
+.paramList ul {
+  padding: 0px;
+  margin: 0px;  
+}
+
+.paramList li {
+  list-style-type: none;
+  padding: 0px;
+  margin: 0px;
+}
+
+.command .name {text-transform:uppercase;background-color:#000;color:#fff;padding:5px;}
