@@ -395,7 +395,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
           tempDiv.addEventListener("click", (function(p,d) {return function() {getCmdParameter(p, d);} })(param,tempDiv), false);
           paramDiv.appendChild(tempDiv);
         }
-      }
+      }   
       cmdDiv.appendChild(paramDiv);
       
       //set parameter value
@@ -433,6 +433,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     target.focus();
     currParam = param;
     currParamDiv = target;
+
     if(param.type == "point") {
       isSelectingPoint = true;
       if(param.isList) {
@@ -450,8 +451,8 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
           //CHANGE: use option value for precision
           listItem.innerHTML = pt[0].toFixed(3) + ", " + pt[1].toFixed(3) + ", " + pt[2].toFixed(3);
           target.children[0].appendChild(listItem);
-
         }
+      //not a list
       } else {
         pointSelection  = function(pt) {
           param.value = pt;
@@ -468,7 +469,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
         }
       }
     } else if(param.type == "object") {
-    
+      
     } else if(param.type == "number") {
       if(param.fromPt) {
         isSelectingPoint = true;
