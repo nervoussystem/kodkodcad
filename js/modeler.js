@@ -31,7 +31,6 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   var previousPt = vec3.create();
   var selectedPt = vec3.create();
   modeler.selectedPt = selectedPt;
-  modeler.pMatrix = mat4.create();
   
   
   var doRedraw = true;
@@ -52,7 +51,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   var gl = webgl.init(canvas);
   modeler.gl = gl;
   modeler.shader = glShader.loadShader(gl,"shaders/phongSimple.vert","shaders/phongSimple.frag");
-  var mouseHandler = new pointer(canvas);
+  var mouseHandler;// = new pointer(canvas);
   /*
     misc drawing stuff
   */
@@ -87,23 +86,28 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     //make windows
     var windowDiv = document.getElementById("window1");
     var cWindow = new modelWindow(windowDiv);
+    setWindowHandler(cWindow,windowDiv);
     modeler.windows.push(cWindow);
     modeler.currWindow = cWindow;
 
     windowDiv = document.getElementById("window2");
     cWindow = new modelWindow(windowDiv);
     cWindow.camera.lookAt([0,-10,0],[0,0,0],[0,0,1]);
-    vec3.set(cWindow.plane,[0,1,0]);
+    vec3.set(cWindow.plane,0,1,0);
+    setWindowHandler(cWindow,windowDiv);
     modeler.windows.push(cWindow);
     
     windowDiv = document.getElementById("window3");
     cWindow = new modelWindow(windowDiv);
     cWindow.camera.lookAt([-10,0,0],[0,0,0],[0,0,1]);
+    vec3.set(cWindow.plane,1,0,0);
+    setWindowHandler(cWindow,windowDiv);
     modeler.windows.push(cWindow);
 
     windowDiv = document.getElementById("window4");
     cWindow = new modelWindow(windowDiv);
     cWindow.camera.lookAt([10,10,10],[0,0,0],[0,0,1]);
+    setWindowHandler(cWindow,windowDiv);
     modeler.windows.push(cWindow);
     
     var pts = [];
@@ -119,6 +123,15 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     modeler.objects.push(basicCurves.circlePtRadius([0,1,0],1.3));
   }
   
+  function setWindowHandler(window, div) {
+    var windowMouse = new pointer(div);
+    window.mouseHandler = windowMouse;
+    div.addEventListener('hover', function(event) { currWindow = modeler.currWindow = window; }, false);
+    windowMouse.mouseDragged = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseDragged(event);};
+    windowMouse.mouseClicked = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseClicked(event);};
+    windowMouse.mouseMoved = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseMoved(event);};
+  }
+  
   modeler.redraw = function() {
     if(!modeler.shader.isReady) { return; }
     modeler.shader.begin();
@@ -129,17 +142,17 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
       var currWindow = modeler.windows[i];
       currWindow.camera.step();
       currWindow.camera.feed();
-      gl.viewport(currWindow.x, currWindow.y, currWindow.width, currWindow.height);
+      gl.viewport(currWindow.x, canvas.height-currWindow.y-currWindow.height, currWindow.width, currWindow.height);
       if(currWindow.camera.isPerspective) {
-        mat4.perspective(modeler.pMatrix, Math.PI/6.0, currWindow.width/currWindow.height, .1, 2000);     
+        mat4.perspective(currWindow.pMatrix, Math.PI/6.0, currWindow.width/currWindow.height, .1, 2000);     
       } else {
         //ortho width based on camera distance and an angle of PI/6.0;
         var w = currWindow.camera.distance*0.267949;
         var h = currWindow.height/currWindow.width*w;
-        mat4.ortho(modeler.pMatrix, -w,w, h,-h,.1,2000);
+        mat4.ortho(currWindow.pMatrix, -w,w, h,-h,.1,2000);
       }
       //set uniforms
-      modeler.shader.uniforms.pMatrix.set(modeler.pMatrix);
+      modeler.shader.uniforms.pMatrix.set(currWindow.pMatrix);
       modeler.shader.uniforms.mvMatrix.set(currWindow.camera.cameraMatrix);
       modeler.shader.uniforms.nMatrix.set(currWindow.camera.nMatrix);
       
@@ -176,16 +189,18 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
           gl.drawArrays(gl.POINTS,0,obj.display.numVertices);
         }*/
       }
+      
+      //draw selected point
+      if(isSelectingPoint) {
+        drawPoints(selectedPt);
+      }
+      
+      if(currCommand) {
+        currCommand.preview(currCommand);
+      }
+
     }
     
-    //draw selected point
-    if(isSelectingPoint) {
-      drawPoints(selectedPt);
-    }
-    
-    if(currCommand) {
-      currCommand.preview(currCommand);
-    }
     modeler.shader.end();
   }
   
@@ -207,12 +222,12 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   }
     
   modeler.selectPoint = function(pt) {
-    var ray = mouseRay();
+    var ray = mouseRay(mouseHandler.mouseX,mouseHandler.mouseY);
     
     //snap
     var snap = false;
     var projMatrix = mat4.create();
-    mat4.mul(projMatrix, modeler.pMatrix,currWindow.camera.cameraMatrix);
+    mat4.mul(projMatrix, currWindow.pMatrix,currWindow.camera.cameraMatrix);
     var invMatrix = mat4.create();
     mat4.invert(invMatrix, projMatrix);
 
@@ -257,16 +272,14 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     var pt2 = vec4.create();
     var invMatrix = mat4.create();
     var ray = [vec3.create(),vec3.create()];
-    return function mouseRay() {
-      var x = mouseHandler.mouseX;
-      var y = mouseHandler.mouseY;
+    return function mouseRay(x,y) {
       var minDepth = 1e9,vbo;
       var pt = vec3.create();
       
       //get ray
       vec4.set(pt1, 2.0*x/currWindow.width-1.0, 1.0-2.0*y/currWindow.height,-1.0,1.0);
       vec4.set(pt2, 2.0*x/currWindow.width-1.0, 1.0-2.0*y/currWindow.height,1.0,1.0);
-      mat4.invert(invMatrix, modeler.pMatrix);
+      mat4.invert(invMatrix, currWindow.pMatrix);
       vec4.transformMat4(pt1, pt1, invMatrix);
       vec4.transformMat4(pt2, pt2, invMatrix);
       //pt1[2] = -1.0;
@@ -285,7 +298,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   })();
   
   modeler.selectObject = function() {
-    var ray = mouseRay();
+    var ray = mouseRay(mouseHandler.mouseX,mouseHandler.mouseY);
     var i0,i1,i2;
     var v0 = vec3.create(),
       v1 = vec3.create(),
@@ -294,7 +307,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
 
     var selDistSq = 100;
     var projMatrix = mat4.create();
-    mat4.mul(projMatrix, modeler.pMatrix,currWindow.camera.cameraMatrix);
+    mat4.mul(projMatrix, currWindow.pMatrix,currWindow.camera.cameraMatrix);
     var invMatrix = mat4.create();
     mat4.invert(invMatrix, projMatrix);
 
@@ -518,7 +531,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     mouse interactions
   */
   
-  mouseHandler.mouseClicked = function(event) {
+  var mouseClicked = function(event) {
     //check status
     if(isSelectingPoint) {
       finishPointSelection(selectedPt);
@@ -555,7 +568,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     }
   }
   
-  mouseHandler.mouseDragged = function(event) {
+  var mouseDragged = function(event) {
     if(mouseHandler.mouseButton == 3) {
       var dx = mouseHandler.mouseX-mouseHandler.pmouseX;
       var dy = mouseHandler.mouseY-mouseHandler.pmouseY;
@@ -573,7 +586,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     }
   }
   
-  mouseHandler.mouseMoved = function(event) {
+  var mouseMoved = function(event) {
     if(isSelectingPoint) {
       modeler.selectPoint(selectedPt);
       pointSelection(selectedPt);

@@ -1,13 +1,14 @@
-define(['camera'], function(Camera) {
-
+define(['camera', 'gl-matrix-min'], function(Camera, glMatrix) {
+  var mat4 = glMatrix.mat4;
+  
   function Window(div) {
     this.x = div.offsetLeft;
     this.y = div.offsetTop;
     this.width = div.offsetWidth;
     this.height = div.offsetHeight;
     this.div = div;
-    div.addEventListener("hover", function() {}, false);
-    div.addEventListener("click", function() {}, false);
+    this.mouseHandler;
+    this.pMatrix = mat4.create();
     
     console.log(this.x + " " + this.y);
     this.camera = new Camera();
