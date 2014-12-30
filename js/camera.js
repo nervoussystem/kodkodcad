@@ -48,9 +48,30 @@ define(["gl-matrix-min"],function(glMatrix) {
     };
   })();
   
-  Camera.prototype.lookAt = function(eye, center, up) {
-    
-  }
+  Camera.prototype.lookAt = (function() {
+    var rotMat = mat3.create();
+    var dir = vec3.create();
+    var perp = vec3.create();
+    var trueUp = vec3.create();
+    return function(eye, center, up) {
+      vec3.copy(this.center, center);
+      this.distance = vec3.dist(eye, center);
+      vec3.sub(dir,center, eye);
+      vec3.normalize(dir,dir);
+      vec3.cross(perp,up,dir);
+      vec3.normalize(perp,perp);
+      vec3.cross(trueUp, dir,perp);
+      
+      rotMat[0] = perp[0]; rotMat[3] = perp[1]; rotMat[6] = perp[2];
+      rotMat[1] = trueUp[0]; rotMat[4] = trueUp[1]; rotMat[7] = trueUp[2];
+      rotMat[2] = dir[0]; rotMat[5] = dir[1]; rotMat[8] = dir[2];
+      
+      quat.fromMat3(this.rot, rotMat);
+      console.log(dir);
+      console.log(trueUp);
+      console.log(this.rot);
+    }
+  })();
 
   Camera.prototype.eyeDir = function(dir) {
     vec3.set(dir,0,0,1);

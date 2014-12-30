@@ -2,6 +2,18 @@ body {
   font-family: sans-serif;
 }
 
+#main {
+position:relative;
+}
+
+#mainCanvas {
+}
+
+.window {
+  position:absolute;
+  border: 1px solid #000;
+}
+
 .title{
 font-size: 20pt;
 margin: 15px 0;

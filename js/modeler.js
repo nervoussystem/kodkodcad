@@ -62,13 +62,8 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
   /*
     setup windows
   */
-  var mainWindow = new modelWindow();
-  mainWindow.width = canvas.width;
-  mainWindow.height = canvas.height;
-  mainWindow.setOrtho(true);
-  modeler.windows.push(mainWindow);
-  var currWindow = mainWindow;
-  modeler.currWindow = mainWindow;
+  var currWindow;// = mainWindow;
+  //modeler.currWindow = mainWindow;
   
   var currCommand;
   var currParam;
@@ -88,6 +83,29 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     //testObj.display = vboMesh.create32(gl);
     document.addEventListener("keyup", keyPress, false);
     loadCommands(basicCurves.commands);
+    
+    //make windows
+    var windowDiv = document.getElementById("window1");
+    var cWindow = new modelWindow(windowDiv);
+    modeler.windows.push(cWindow);
+    modeler.currWindow = cWindow;
+
+    windowDiv = document.getElementById("window2");
+    cWindow = new modelWindow(windowDiv);
+    cWindow.camera.lookAt([0,-10,0],[0,0,0],[0,0,1]);
+    vec3.set(cWindow.plane,[0,1,0]);
+    modeler.windows.push(cWindow);
+    
+    windowDiv = document.getElementById("window3");
+    cWindow = new modelWindow(windowDiv);
+    cWindow.camera.lookAt([-10,0,0],[0,0,0],[0,0,1]);
+    modeler.windows.push(cWindow);
+
+    windowDiv = document.getElementById("window4");
+    cWindow = new modelWindow(windowDiv);
+    cWindow.camera.lookAt([10,10,10],[0,0,0],[0,0,1]);
+    modeler.windows.push(cWindow);
+    
     var pts = [];
     for(var i=0;i<10;++i) {
       //vboMesh.addVertex(testObj.display,[Math.cos(Math.PI*2*i/20),Math.sin(Math.PI*2*i/20),0]);
@@ -355,47 +373,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
       if(firstParam === undefined) { firstParam = name; }
       
       paramDiv = document.createElement('div');
-      paramDiv.classList.add("param");
-      
-      tempDiv = document.createElement('div');
-      tempDiv.classList.add("label");
-      tempDiv.innerHTML = name;
-      
-      paramDiv.appendChild(tempDiv);
-      
-      if(param.isList) {
-        tempDiv = document.createElement('div');
-        tempDiv.classList.add("paramList");
-        tempDiv.innerHTML = "<ul><li>add</li></ul>";
-        
-        tempDiv.addEventListener("click", (function (p,d) { return function() {getCmdParameter(p, d);} })(param,tempDiv), false);
-        paramDiv.appendChild(tempDiv);
-      } else {
-        if(param.type == "number" || param.type == "integer") {
-          tempDiv = document.createElement('input');
-          tempDiv.type = "text";
-          tempDiv.classList.add("paramInput");
-          if(param.default) {
-            if(typeof(param.default) == "function") {
-              tempDiv.value = param.default();
-            } else {
-              tempDiv.value = param.default;
-            }
-          }
-          
-          tempDiv.addEventListener("click", (function(p,d) {return function() {getCmdParameter(p, d);} })(param,tempDiv), false);
-          tempDiv.addEventListener("change", (function(p,v) { return function() {setCmdParameter(p, this.value);} })(param), false);
-          
-          paramDiv.appendChild(tempDiv);
-          
-        } else {
-          tempDiv = document.createElement('div');
-          tempDiv.classList.add("paramInput");
-          
-          tempDiv.addEventListener("click", (function(p,d) {return function() {getCmdParameter(p, d);} })(param,tempDiv), false);
-          paramDiv.appendChild(tempDiv);
-        }
-      }   
+      makeParamUI(param, name, paramDiv);
       cmdDiv.appendChild(paramDiv);
       
       //set parameter value
@@ -419,6 +397,50 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves','gl-m
     
     //start selecting first param
     getCmdParameter(cmd.parameters[firstParam],cmdDiv.children[1].children[1]);
+  }
+  
+  function makeParamUI(param, paramName, paramDiv) {
+    paramDiv.classList.add("param");
+    
+    var tempDiv = document.createElement('div');
+    tempDiv.classList.add("label");
+    tempDiv.innerHTML = paramName;
+    
+    paramDiv.appendChild(tempDiv);
+
+    if(param.isList) {
+      tempDiv = document.createElement('div');
+      tempDiv.classList.add("paramList");
+      tempDiv.innerHTML = "<ul><li>add</li></ul>";
+      
+      tempDiv.addEventListener("click", function() {getCmdParameter(param, tempDiv);}, false);
+      paramDiv.appendChild(tempDiv);
+    } else {
+      if(param.type == "number" || param.type == "integer") {
+        tempDiv = document.createElement('input');
+        tempDiv.type = "text";
+        tempDiv.classList.add("paramInput");
+        if(param.default) {
+          if(typeof(param.default) == "function") {
+            tempDiv.value = param.default();
+          } else {
+            tempDiv.value = param.default;
+          }
+        }
+        
+        tempDiv.addEventListener("click", function() {getCmdParameter(param, tempDiv);}, false);
+        tempDiv.addEventListener("change", function() {setCmdParameter(param, this.value);}, false);
+        
+        paramDiv.appendChild(tempDiv);
+        
+      } else {
+        tempDiv = document.createElement('div');
+        tempDiv.classList.add("paramInput");
+        
+        tempDiv.addEventListener("click", function() {getCmdParameter(param, tempDiv);}, false);
+        paramDiv.appendChild(tempDiv);
+      }
+    }
   }
   
   function getCmdParameter(param, target) {
