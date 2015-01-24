@@ -54,7 +54,18 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     }
   })();
   
-  
+  Curve.prototype.transform = function(mat) {
+    var len = this.rep.controlPts.length;
+    if(this.isClosed) {
+      len -= 1;
+    }
+    for(var i=0;i<len;++i) {
+      var pt = this.rep.controlPts[i];
+      vec4.projectDown(pt,pt);
+      vec3.transformMat4(pt, pt, mat);
+      vec4.unprojectDown(pt,pt);
+    }
+  }
   
   var commands = [
     {

@@ -55,7 +55,7 @@ define(function() {
         self.mouseButton = event.which;
         self.startMouseTime = performance.now();
         if(typeof self.mouseDown !== 'undefined') {
-            self.mouseDown();
+            self.mouseDown(event);
         }
     }
 

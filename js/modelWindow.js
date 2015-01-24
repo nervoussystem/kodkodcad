@@ -10,7 +10,6 @@ define(['camera', 'gl-matrix-min'], function(Camera, glMatrix) {
     this.mouseHandler;
     this.pMatrix = mat4.create();
     
-    console.log(this.x + " " + this.y);
     this.camera = new Camera();
     this.plane = [0,0,1,0];
   }

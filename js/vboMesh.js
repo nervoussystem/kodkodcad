@@ -2,6 +2,12 @@ define(['gl-matrix-min'],function(glMatrix) {
   "use strict";
   var vec3 = glMatrix.vec3;
 var vboMesh = {};
+var gl;
+
+vboMesh.setGL = function(glContext) {
+  gl = glContext;
+}
+
 vboMesh.create = function(gl) {
     var vbo = {};
     vbo.vertexData = new Float32Array(3*100);

@@ -15,7 +15,7 @@ vec4.zero=function(a){a[0]=0;a[1]=0;a[2]=0;a[3]=0};
 //a nurbs object has control pts,knots, degree
 var nurbs = {};
 //used locally
-nurbs.MAX_DEGREE = 10;
+nurbs.MAX_DEGREE = 5;
 nurbs.basisFuncs = new Float32Array(10);
 nurbs.basisFuncsU = new Float32Array(10);
 nurbs.basisFuncsV = new Float32Array(10);
@@ -96,8 +96,10 @@ nurbs.copyCrv = function(crv) {
 	var newCrv = {};
 	newCrv.degree = crv.degree;
 	newCrv.knots = crv.knots.slice(0);
-	newCrv.controlPts = crv.controlPts.slice(0);
-	return newCrv;
+	//newCrv.controlPts = crv.controlPts.slice(0);
+	newCrv.controlPts = new Array(crv.controlPts.length);
+  for(var i=0;i<crv.controlPts.length;++i) newCrv.controlPts[i] = vec4.clone(crv.controlPts[i]);
+  return newCrv;
 }
 
 //binary search
@@ -145,6 +147,10 @@ nurbs.crvDerivatives = (function() {
 	var i,j,der, currPt = vec3.create();
 	//for(i=0;i<hPts.length;++i) hPts[i] = vec4.create();
 	for(i=0;i<derivesW.length;++i) derivesW[i] = vec4.create();
+  
+  var basFunc = new Array(nurbs.MAX_DEGREE+1);
+	for(i=0;i<nurbs.MAX_DEGREE+1;++i) basFunc[i] = new Float32Array(nurbs.MAX_DEGREE+1);
+
 	return function(crv,u,k,out) {
 		if(out === undefined) {
 			out = new Array(k+1);
@@ -154,7 +160,7 @@ nurbs.crvDerivatives = (function() {
 		//for(i=0;i<=crv.degree;++i) {
 		//	vec4.copy(hPts[i], crv.controlPts[currKnot-crv.degree+i]);
 		//}
-		var basFunc = nurbs.deriveBasisFunctions(crv.knots,crv.degree,currKnot, u, k);
+		nurbs.deriveBasisFunctions(crv.knots,crv.degree,currKnot, u, k, basFunc);
 		for(i=0;i<=k;++i) {
 			der = derivesW[i];
 			vec4.zero(der);
@@ -186,6 +192,14 @@ nurbs.domain = function(c,b) {
 	b[1]=c.knots[c.knots.length-(c.degree)-1];
 	return b;
 }
+
+nurbs.domainSrf = function(c,b) {
+	b = b || new Array(2);
+	b[0]= [c.knotsU[c.degreeU], c.knotsU[c.knotsU.length-(c.degreeU)-1]];
+	b[1]= [c.knotsV[c.degreeV], c.knotsV[c.knotsV.length-(c.degreeV)-1]];
+	return b;
+}
+
 
 nurbs.knotMultiplicity = function(i, knots,degree) {
 	var knot = knots[i];
@@ -228,12 +242,17 @@ nurbs.addPoint = function(crv, pt) {
 
 //insert a knot a u some times
 //this should use native array methods not this weird copying
+//does this need checks for legal inserts
 nurbs.insertKnot = function(crv,u,times) {
+  var degree = crv.degree;
+  var knots = crv.knots;
+  
 	if(!times) times = 1;
 	var currKnot = nurbs.findKnot(crv.knots,u,crv.degree);
 	var multiplicity = nurbs.findMultiplicity(crv.knots,currKnot);
-	//times = Math.min(degree-times-multiplicity,times);
-	//times = Math.max(0,times);
+	times = Math.min(degree-times-multiplicity,times);
+	if(times <= 0) return;
+  //times = Math.max(0,times);
 	var newKnots = new Float32Array(crv.knots.length+times);
 	var newPoints = new Array(crv.controlPts.length+times);
 
@@ -265,50 +284,46 @@ nurbs.insertKnot = function(crv,u,times) {
 }	  
 
 nurbs.insertKnotArray = function(crv,us) {
-
+   if(us.length == 0) return;
+   var startKnot = nurbs.findKnot(crv.knots,us[0],crv.degree);
+   var endKnot =nurbs.findKnot(crv.knots,us[us.length-1],crv.degree);
+   var newKnots = new Float32Array(crv.knots.length+us.length);
+   var newPoints = new Array(crv.controlPts.length+us.length);
+   for(var j=0;j<newPoints.length;++j) newPoints[j] = vec4.create();
+   for(var j=0;j<=startKnot-crv.degree;++j) vec4.copy(newPoints[j],crv.controlPts[j]);
+   for(var j=endKnot-1;j<crv.controlPts.length;++j) vec4.copy(newPoints[j+us.length],crv.controlPts[j]);
+   for(var j=0;j<=startKnot;++j) newKnots[j] = crv.knots[j];
+   for(var j=endKnot+crv.degree;j<crv.knots.length;++j) newKnots[j+us.length] = crv.knots[j];
+   var i=endKnot+crv.degree-1;
+   var k= endKnot+crv.degree+us.length-1;
+   var j,l;
+   for(j=us.length-1;j>=0;--j) {
+     while(us[j] <= crv.knots[i] && i>startKnot) {
+      vec4.copy(newPoints[k-crv.degree-1],crv.controlPts[i-crv.degree-1]);
+       newKnots[k] = crv.knots[i];
+       --k;
+       --i;
+     }
+     vec4.copy(newPoints[k-crv.degree-1],newPoints[k-crv.degree]);
+     for(l=1;l<=crv.degree;++l) {
+       var ind = k-crv.degree+l;
+       var alpha = newKnots[k+l]-us[j];
+       if(Math.abs(alpha) == 0) vec4.copy(newPoints[ind-1], newPoints[ind]);
+       else {
+         alpha = alpha/(newKnots[k+l]-crv.knots[i-crv.degree+l]);
+         vec4.scale(newPoints[ind-1],newPoints[ind-1],alpha);
+         vec4.scaleAndAdd(newPoints[ind-1],newPoints[ind-1],newPoints[ind],1-alpha);
+         //newPoints[ind-1] = Vector4D.add(Vector4D.multiply(newPoints[ind-1],alpha), Vector4D.multiply(newPoints[ind],1-alpha));
+       }
+     }
+     newKnots[k] = us[j];
+     --k;
+   }
+   crv.knots = newKnots;
+   crv.controlPts = newPoints;
 }
 	  /*	 
 	 public void insertKnots(float[] insertKnots) {
-		 int startKnot = findKnot(insertKnots[0]);
-		 int endKnot = findKnot(insertKnots[insertKnots.length-1])+1;
-		 float[] newKnots = new float[knots.length+insertKnots.length];
-		 Vector4D[] newPoints = new Vector4D[controlPts.length+insertKnots.length];
-		 for(int j=0;j<=startKnot-degree;++j) newPoints[j] = new Vector4D(controlPts[j],weights[j]);
-		 for(int j=endKnot-1;j<controlPts.length;++j) newPoints[j+insertKnots.length] =  new Vector4D(controlPts[j],weights[j]);
-		 for(int j=0;j<=startKnot;++j) newKnots[j] = knots[j];
-		 for(int j=endKnot+degree;j<knots.length;++j) newKnots[j+insertKnots.length] = knots[j];
-		 int i=endKnot+degree-1;
-		 int k= endKnot+degree+insertKnots.length-1;
-		 for(int j=insertKnots.length-1;j>=0;--j) {
-			 while(insertKnots[j] <= knots[i] && i>startKnot) {
-				 newPoints[k-degree-1] = new Vector4D(controlPts[i-degree-1],weights[i-degree-1]);
-				 newKnots[k] = knots[i];
-				 --k;
-				 --i;
-			 }
-			 newPoints[k-degree-1] = newPoints[k-degree];
-			 for(int l=1;l<=degree;++l) {
-				 int ind = k-degree+l;
-				 loat alpha = newKnots[k+l]-insertKnots[j];
-				 if(Math.abs(alpha) == 0) newPoints[ind-1] = newPoints[ind];
-				 else {
-					 alpha = alpha/(newKnots[k+l]-knots[i-degree+l]);
-					 newPoints[ind-1] = Vector4D.add(Vector4D.multiply(newPoints[ind-1],alpha), Vector4D.multiply(newPoints[ind],1-alpha));
-				 }
-			 }
-			 newKnots[k] = insertKnots[j];
-			 --k;
-		 }
-		 knots = newKnots;
-		 controlPts = new PVector[newPoints.length];
-		 weights = new float[newPoints.length];
-		 for(int j=0;j<newPoints.length;++j) {
-			 
-			 if(newPoints[j] != null) {
-				 controlPts[j] = newPoints[j].projectDown();
-				 weights[j] = newPoints[j].w;
-			 }
-		 }
 	 }
 */
 //make knot values between 0 and 1 aka evaluate(0) = start and evaluate(1) = end
@@ -363,9 +378,9 @@ nurbs.deriveBasisFunctions = (function() {
 	var ndu = new Array(nurbs.MAX_DEGREE+1);
 	for(i=0;i<nurbs.MAX_DEGREE+1;++i) a[i] = new Float32Array(nurbs.MAX_DEGREE+1);
 	for(i=0;i<nurbs.MAX_DEGREE+1;++i) ndu[i] = new Float32Array(nurbs.MAX_DEGREE+1);
-	var basisFuncs = new Array(nurbs.MAX_DEGREE+1);
-	for(i=0;i<nurbs.MAX_DEGREE+1;++i) basisFuncs[i] = new Float32Array(nurbs.MAX_DEGREE+1);
-	return function deriveBasisFunctions_(knots,degree,knot, u, der) {
+	//var basisFuncs = new Array(nurbs.MAX_DEGREE+1);
+	//for(i=0;i<nurbs.MAX_DEGREE+1;++i) basisFuncs[i] = new Float32Array(nurbs.MAX_DEGREE+1);
+	return function deriveBasisFunctions_(knots,degree,knot, u, der, basisFuncs) {
 		ndu[0][0] = 1;
 		var saved,temp;
 		for(j=1;j<=degree;++j) {
@@ -572,6 +587,7 @@ nurbs.createSrf = function() {
 }
 
 
+
 nurbs.evaluateSrf = function(srf,u,v,pt) {
 	pt = pt || vec3.create();
 	//if(controlPts.length == 0) return new PVector();
@@ -587,7 +603,7 @@ nurbs.evaluateSrf = function(srf,u,v,pt) {
 	for(i=0;i<=srf.degreeV;++i) {
 		temp[i] = vec4.create();
 		for(j=0;j<=srf.degreeU;++j) {
-			vec4.scaleAnddAdd(temp[i], temp[i], srf.controlPts[uKnot-srf.degreeU+j][vKnot-srf.degreeV+i], nurbs.basisFuncsU[j]);
+			vec4.scaleAndAdd(temp[i], temp[i], srf.controlPts[uKnot-srf.degreeU+j][vKnot-srf.degreeV+i], nurbs.basisFuncsU[j]);
 		}
 	}
 	
@@ -597,6 +613,83 @@ nurbs.evaluateSrf = function(srf,u,v,pt) {
 	}
 	return vec4.projectDown(evalPt,pt);
 }
+    
+nurbs.evaluateSrfDerivatives = (function() {
+  var tempU = Array(nurbs.MAX_DEGREE+1);
+  var tempV = Array(nurbs.MAX_DEGREE+1);
+  for(var i=0;i<nurbs.MAX_DEGREE+1;++i) {
+    tempU[i] = vec4.create();
+    tempV[i] = vec4.create();
+  }
+  
+  var uVec = vec4.create();
+  var duVec = vec4.create();
+  var dvVec = vec4.create();
+
+	var basFuncU = new Array(nurbs.MAX_DEGREE+1);
+	for(i=0;i<nurbs.MAX_DEGREE+1;++i) basFuncU[i] = new Float32Array(nurbs.MAX_DEGREE+1);
+  var basFuncV = new Array(nurbs.MAX_DEGREE+1);
+	for(i=0;i<nurbs.MAX_DEGREE+1;++i) basFuncV[i] = new Float32Array(nurbs.MAX_DEGREE+1);
+
+  return function(srf,u,v,pt, du, dv) {
+    pt = pt || vec3.create();
+    //if(controlPts.length == 0) return new PVector();
+    var uKnot = nurbs.findKnot(srf.knotsU,u,srf.degreeU);
+    var vKnot = nurbs.findKnot(srf.knotsV,v,srf.degreeV);
+    //nurbs.basisFunctions(srf.knotsU, srf.degreeU, uKnot,u,nurbs.basisFuncsU);
+    //nurbs.basisFunctions(srf.knotsV, srf.degreeV, vKnot,v,nurbs.basisFuncsV);
+    nurbs.deriveBasisFunctions(srf.knotsU,srf.degreeU,uKnot, u, 1, basFuncU);
+    nurbs.deriveBasisFunctions(srf.knotsV,srf.degreeV,vKnot, v, 1, basFuncV);
+
+    var evalPt = vec4.create();
+    var i,j;
+
+    //v
+    for(i=0;i<=srf.degreeV;++i) {
+      vec4.zero(tempV[i]);
+      for(j=0;j<=srf.degreeU;++j) {
+        vec4.scaleAndAdd(tempV[i], tempV[i], srf.controlPts[uKnot-srf.degreeU+j][vKnot-srf.degreeV+i], basFuncU[0][j]);
+      }
+    }
+    
+    //u side
+    for(i=0;i<=srf.degreeU;++i) {
+      vec4.zero(tempU[i]);
+      for(j=0;j<=srf.degreeV;++j) {
+        vec4.scaleAndAdd(tempU[i], tempU[i], srf.controlPts[uKnot-srf.degreeU+i][vKnot-srf.degreeV+j], basFuncV[0][j]);
+      }
+    }
+    
+    //do u and v derivatives
+    vec4.zero(uVec);
+    for(j=0;j<=srf.degreeU;++j) {
+      vec4.scaleAndAdd(uVec,uVec,tempU[j],basFuncU[0][j]);
+    }
+    vec4.zero(duVec);
+    for(j=0;j<=srf.degreeU;++j) {
+      vec4.scaleAndAdd(duVec,duVec,tempU[j],basFuncU[1][j]);
+    }
+
+    vec4.zero(dvVec);
+    for(j=0;j<=srf.degreeV;++j) {
+      vec4.scaleAndAdd(dvVec,dvVec,tempV[j],basFuncV[1][j]);
+    }
+    
+    vec3.copy(pt, uVec);
+    //project down
+    vec3.set(pt, pt[0]/uVec[3], pt[1]/uVec[3], pt[2]/uVec[3]);
+    
+    vec3.copy(du, duVec);
+    vec3.scaleAndAdd(du,du, pt, -nurbs.B[1][1]*duVec[3]);
+    vec3.set(du, du[0]/uVec[3], du[1]/uVec[3], du[2]/uVec[3]);
+    
+    vec3.copy(dv, dvVec);
+    vec3.scaleAndAdd(dv,dv, pt, -nurbs.B[1][1]*dvVec[3]);
+    vec3.set(dv, dv[0]/uVec[3], dv[1]/uVec[3], dv[2]/uVec[3]);
+    
+    return pt;
+  };
+})();
 	/*
 
 	NurbsCurve isocurve(float u, boolean dir) {
@@ -628,13 +721,14 @@ nurbs.evaluateSrf = function(srf,u,v,pt) {
 	
 	*/
 	
+  //THIS SHOULD TAKE AN ARRAY OF CURVES THIS IS STUPID WHAT THE HELL IS WRONG WITH ME
 nurbs.loft = function(crv1,crv2) {
 	//do degree elevation
 	if(crv1.degree != crv2.degree) return null;
 	var temp1 = nurbs.copyCrv(crv1);
 	var temp2 = nurbs.copyCrv(crv2);
-	nurbs.normalizeKnots(temp1);
-	nurbs.normalizeKnots(temp2);
+	nurbs.normalizeKnots(temp1.knots);
+	nurbs.normalizeKnots(temp2.knots);
 	//find difference
 	var k = 0,i;
 	var insertTemp1 = [];
@@ -651,8 +745,8 @@ nurbs.loft = function(crv1,crv2) {
 		insertTemp1.push(temp2.knots[k]);
 		++k;
 	}
-	if(insertTemp1.length > 0) nurbs.insertKnots(temp1,insertTemp1);
-	if(insertTemp2.length > 0) nurbs.insertKnots(temp2,insertTemp2);
+	if(insertTemp1.length > 0) nurbs.insertKnotArray(temp1,insertTemp1);
+	if(insertTemp2.length > 0) nurbs.insertKnotArray(temp2,insertTemp2);
 	
 	var pts = new Array(temp1.controlPts.length);
 	for(i=0;i<pts.length;++i) {
@@ -669,6 +763,98 @@ nurbs.loft = function(crv1,crv2) {
 	}
 	return toReturn;
 }
+
+//watch for rounding errors
+nurbs.loft = function(crvs) {
+  //sanity check
+  if(crvs.length < 2) return;
+  //CHANGE: check if all closed or all open
+  
+	//do degree elevation
+  var maxDegree = 1;
+  var i,j,k;
+  for(i=0;i<crvs.length;++i) {
+    maxDegree = Math.max(maxDegree, crvs[i].degree);
+  }
+  //no degree elevation yet
+  
+  var tempCrvs = new Array(crvs.length);
+  for(i=0;i<crvs.length;++i) {
+    tempCrvs[i] = nurbs.copyCrv(crvs[i]);
+    nurbs.normalizeKnots(tempCrvs[i].knots);
+  }
+  
+  //get master knot list, should be an efficient way to merge sorted lists
+  //might need to do something for closed curves?
+  var allKnots = tempCrvs[0].knots.slice(0);
+  for(i=1;i<crvs.length;++i) {
+    var curKnots = tempCrvs[i].knots;
+    //splicing not very efficient
+    var k=0;
+    for(j=0;j<allKnots.length;++j) {
+      while(curKnots[k] < allKnots[j]) {
+        allKnots.splice(j,0,curKnots[k]);
+        k++;
+      }
+      if(allKnots[j] == curKnots[k]) {
+        k++;
+      } 
+    }
+  }
+  
+  //insert knots in all curves to normalize knot vectors
+  var insertArr = [];
+  for(i=0;i<tempCrvs.length;++i) {
+    var crv = tempCrvs[i];
+    insertArr.length = 0;
+    var curKnots = crv.knots;
+    
+    //get missing knots
+    k=0;
+    for(j=0;j<curKnots.length;++j) {
+      while(allKnots[k] < curKnots[j]) {
+        insertArr.push(allKnots[k]);
+        k++;
+      }
+      if(allKnots[k] == curKnots[j]) {
+        k++;
+      }
+    }
+    
+    nurbs.insertKnotArray(crv, insertArr);
+    
+  }
+  
+  var pts = new Array(tempCrvs[0].controlPts.length);
+  for(i=0;i<pts.length;++i) {
+    pts[i] = new Array(tempCrvs.length);
+    for(j=0;j<tempCrvs.length;++j) {
+      pts[i][j] = tempCrvs[j].controlPts[i];
+    }
+  }
+  
+  var vDegree =  Math.min(tempCrvs.length-1,3);
+	var toReturn = nurbs.createSrf();
+	toReturn.controlPts = pts;
+	toReturn.degreeU = maxDegree;
+	toReturn.degreeV = vDegree;
+  
+  for(i=0;i<vDegree+1;++i) {
+    toReturn.knotsV.push(0);
+  }
+  k = 1;
+  for(i=0;i<tempCrvs.length-vDegree-1;++i) {
+    toReturn.knotsV.push(k++);
+  }
+  for(i=0;i<vDegree+1;++i) {
+    toReturn.knotsV.push(k);
+  }
+	//toReturn.knotsV = [0,0,1,1]; 
+  toReturn.knotsU = allKnots;
+	return toReturn;
+  
+	
+ }
 
 //revolve
 nurbs.revolve = function(crv, axis) {

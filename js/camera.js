@@ -67,9 +67,6 @@ define(["gl-matrix-min"],function(glMatrix) {
       rotMat[2] = dir[0]; rotMat[5] = dir[1]; rotMat[8] = dir[2];
       
       quat.fromMat3(this.rot, rotMat);
-      console.log(dir);
-      console.log(trueUp);
-      console.log(this.rot);
     }
   })();
 
