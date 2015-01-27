@@ -21,12 +21,19 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
   modeler.EPSILON = 1e-4;
   
   /*
+    configuration
+  */
+  modeler.selectedColor = [1.0,1.0,0.0,1.0];
+  modeler.units = "mm";
+  
+  /*
     variables
   */
   modeler.selection = [];
   modeler.objects = [];
   modeler.windows = [];
   modeler.modules = [];
+  
   
   var previousPt = vec3.create();
   var selectedPt = vec3.create();
@@ -40,6 +47,8 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
   var selectionFilter = 0;
   var isSelectingObjects = false;
   var isDragging = false;
+  var mvMatrix = mat4.create();
+  var pMatrix = mat4.create();
   
   function resetUIState() {
     isSelectingPoint = false;
@@ -103,6 +112,10 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
     //testObj.type = modeler.CURVE;
     //testObj.display = vboMesh.create32(gl);
     document.addEventListener("keyup", keyPress, false);
+    
+    setupGL();
+    
+    loadCommands(basicCommands);
     loadCommands(basicCurves.commands);
     loadCommands(surface.commands);
     
@@ -141,9 +154,13 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
     //vboMesh.buffer(testObj.display, gl);
     //modeler.objects.push(testObj);
     var testObj = basicCurves.curveFromPts(pts);
-    testObj.updateMesh();
     modeler.objects.push(testObj);
     modeler.objects.push(basicCurves.circlePtRadius([0,1,0],1.3));
+  }
+  
+  function setupGL() {
+    //gl.enable(gl.BLEND);
+    //gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
   }
   
   function setWindowHandler(window, div) {
@@ -151,6 +168,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
     window.mouseHandler = windowMouse;
     div.addEventListener('hover', function(event) { currWindow = modeler.currWindow = window; }, false);
     windowMouse.mouseDragged = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseDragged(event);};
+    windowMouse.mouseDragStart = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseDragStart(event);};
     windowMouse.mouseClicked = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseClicked(event);};
     windowMouse.mouseDown = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseDown(event);};
     windowMouse.mouseUp = function(event) {currWindow = modeler.currWindow = window; mouseHandler = window.mouseHandler; mouseUp(event);};
@@ -178,8 +196,11 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
         mat4.ortho(currWindow.pMatrix, -w,w, h,-h,.1,2000);
       }
       //set uniforms
-      modeler.shader.uniforms.pMatrix.set(currWindow.pMatrix);
-      modeler.shader.uniforms.mvMatrix.set(currWindow.camera.cameraMatrix);
+      mat4.copy(pMatrix,currWindow.pMatrix);
+      mat4.copy(mvMatrix,currWindow.camera.cameraMatrix);
+      
+      modeler.shader.uniforms.pMatrix.set(pMatrix);
+      modeler.shader.uniforms.mvMatrix.set(mvMatrix);
       modeler.shader.uniforms.nMatrix.set(currWindow.camera.nMatrix);
       
       modeler.shader.uniforms.ambientLightingColor.set([.2,.2,.2]);
@@ -286,7 +307,6 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
           basicCurves.evaluate(obj, u, pt);
           snap = true;
         }
-        obj.updateMesh();
       }
     }
     
@@ -373,7 +393,9 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
 
     var mousePtH = [mouseHandler.mouseX/currWindow.width*2-1,-mouseHandler.mouseY/currWindow.height*2+1,0];
     var mousePt = [mouseHandler.mouseX,mouseHandler.mouseY,0];
+    var windowPt = vec2.create();
     var testPt = vec3.create();
+    var minPt = vec3.create();
     
     //should get candidate objects and sort by depth
     for(var i=0, len=modeler.objects.length;i<len;++i) {
@@ -383,36 +405,57 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
         
         //project to screen
         //basicCurves.transform(obj, projMatrix);
-        obj.transform(projMatrix);
-        
-        var u = basicCurves.projectToCurve2D(obj,mousePtH, testPt);
-        //dehomogenize for distance test
-        testPt[0] = (testPt[0]+1)*currWindow.width*0.5;
-        testPt[1] = -(testPt[1]-1)*currWindow.height*0.5;
-        var dist = vec2.sqrDist(testPt,mousePt);
-        if(dist < selDistSq) {
-          basicCurves.evaluate(obj, u, testPt);
-          if(testPt[2] > -1 && testPt[2] < minDepth) {
-            closestObj = obj;
-            minDepth = testPt[2];
+        if(obj.mode === 0) {
+          obj.transform(projMatrix);
+          
+          var u = basicCurves.projectToCurve2D(obj,mousePtH, testPt);
+          //dehomogenize for distance test
+          testPt[0] = (testPt[0]+1)*currWindow.width*0.5;
+          testPt[1] = -(testPt[1]-1)*currWindow.height*0.5;
+          var dist = vec2.sqrDist(testPt,mousePt);
+          if(dist < selDistSq) {
+            basicCurves.evaluate(obj, u, testPt);
+            if(testPt[2] > -1 && testPt[2] < minDepth) {
+              closestObj = obj;
+              minDepth = testPt[2];
+              vec3.copy(minPt, testPt);
+            }
+          }
+          //basicCurves.transform(obj, invMatrix);
+          obj.transform(invMatrix);
+        } else if(obj.mode === 1) {
+          for(var j=0;j<obj.controlPts.length;++j) {
+            vec4.projectDown(obj.controlPts[j].pt, testPt);
+            vec3.transformMat4(testPt, testPt,projMatrix);
+            if(testPt[2] > -1 && testPt[2] < minDepth) {
+              windowPt[0] = (testPt[0]+1)*currWindow.width*0.5;
+              windowPt[1] = -(testPt[1]-1)*currWindow.height*0.5;
+              if(vec2.sqrDist(windowPt, mousePt) < selDistSq) {
+                closestObj = obj.controlPts[j];
+                minDepth = testPt[2];
+                vec3.copy(minPt, testPt);
+              }            
+            }
           }
         }
-        //basicCurves.transform(obj, invMatrix);
-        obj.transform(invMatrix);
       } else if(obj.type == modeler.SURFACE) {
         if(raySrfIntersection(testPt, ray, obj)) {
           if(testPt[2] > -1 && testPt[2] < minDepth) {
             closestObj = obj;
             minDepth = testPt[2];
+            vec3.transformMat4(minPt,testPt,projMatrix);
           }
         }
       }
     }
     var closestObj;
     if(closestObj) {
+      vec3.transformMat4(selectedPt, minPt, invMatrix);
         return closestObj;
     } else return null;
   }
+  
+  
   
   function loadCommands(cmds) {
     var cmdDiv = document.getElementById('commands');
@@ -555,7 +598,7 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
       } else {
         pointSelection  = function(pt) {
           param.value = pt;
-          //CHANGE: use option value for precision
+          //CHANGE: use option value for precision          
           if(target) {
             target.innerHTML = pt[0].toFixed(3) + ", " + pt[1].toFixed(3) + ", " + pt[2].toFixed(3);
           }
@@ -723,7 +766,11 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
         ry /= currWindow.height;
         currWindow.camera.mouseRotate(dx,dy,rx,ry);
       }
-    } else if(mouseHandler.mouseButton == 1) {
+    }
+  }
+  
+  var mouseDragStart = function(event) {
+    if(mouseHandler.mouseButton == 1) {
       if(modeler.selection.length > 0 && !currCommand) {
         cancelCommand();
         currCommand = dragCommand;
@@ -742,7 +789,6 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
       modeler.selectPoint(selectedPt);
       pointSelection(selectedPt);
       //do something with the point
-      
     } else if(isDragging) {
       
     }
@@ -754,7 +800,15 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
         pressEnter();
         break;
       case 27:
-        cancelCommand();
+        if(currCommand) {
+          cancelCommand();
+        } else if(modeler.selection.length > 0){
+          deselectAll();
+        } else {
+          for(var i=0;i<modeler.objects.length;++i) {
+            modeler.objects[i].disableEditMode();
+          }
+        }
         break;
     }
   }
@@ -857,18 +911,21 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
       var i,len = objs.length;
       //get transformation
       var transform = mat4.create();
+      var invMatrix = mat4.create();
       mat4.identity(transform);
       var endPt = cmd.parameters.endPt.value;
       var startPt = cmd.parameters.startPt.value;
-      vec3.sub(endPt,endPt,startPt);
+      var dir = vec3.create();
+      vec3.sub(dir,endPt,startPt);
       
-      mat4.translate(transform, currWindow.camera.cameraMatrix, endPt);
+      mat4.translate(transform, mvMatrix, dir);
       modeler.shader.uniforms.mvMatrix.set(transform);
+      mat4.invert(invMatrix, transform);
       for(i=0;i<len;++i) {
         objs[i].draw();
         
       }
-      modeler.shader.uniforms.mvMatrix.set(currWindow.camera.cameraMatrix);
+      modeler.shader.uniforms.mvMatrix.set(mvMatrix);
     }
   },
   "finish" : function(cmd) {
@@ -879,11 +936,11 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
     mat4.identity(transform);
     var endPt = cmd.parameters.endPt.value;
     var startPt = cmd.parameters.startPt.value;
-    vec3.sub(endPt,endPt,startPt);
-    mat4.translate(transform, transform, endPt);
+    var dir = vec3.create();
+    vec3.sub(dir,endPt,startPt);
+    mat4.translate(transform, transform, dir);
     for(i=0;i<len;++i) {
       objs[i].transform(transform);
-      objs[i].updateMesh();
     }
   }
   };
@@ -895,59 +952,9 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
     "objects" :
      {"type": "object",
       "isList": true},
-    "direction" : 
-      {"type": "direction"},
+    "startPt" : 
+      {"type": "point"},
     "endPt" :
-      {"distance": "number"}
-    },
-  "start" : function(cmd) {
-    //check for valid input?
-  },
-  "preview" : function(cmd) {
-    var endPt = cmd.parameters.endPt.value;
-    if(endPt) {
-      var objs = cmd.parameters.objects.value;
-      var i,len = objs.length;
-      //get transformation
-      var transform = mat4.create();
-      mat4.identity(transform);
-      var endPt = cmd.parameters.endPt.value;
-      var startPt = cmd.parameters.startPt.value;
-      vec3.sub(endPt,endPt,startPt);
-      
-      mat4.translate(transform, currWindow.camera.cameraMatrix, endPt);
-      modeler.shader.uniforms.mvMatrix.set(transform);
-      for(i=0;i<len;++i) {
-        objs[i].draw();
-        
-      }
-      modeler.shader.uniforms.mvMatrix.set(currWindow.camera.cameraMatrix);
-    }
-  },
-  "finish" : function(cmd) {
-    var objs = cmd.parameters.objects.value;
-    var i,len = objs.length;
-    //get transformation
-    var transform = mat4.create();
-    mat4.identity(transform);
-    var endPt = cmd.parameters.endPt.value;
-    var startPt = cmd.parameters.startPt.value;
-    vec3.sub(endPt,endPt,startPt);
-    mat4.translate(transform, transform, endPt);
-    for(i=0;i<len;++i) {
-      objs[i].transform(transform);
-    }
-  }
-  },
-  {
-  "name":"Rotate",
-  "parameters": {
-    "objects" :
-     {"type": "object",
-      "isList": true},
-    "axis" : 
-      {"type": "axis"},
-    "angle" :
       {"type": "point"}
     },
   "start" : function(cmd) {
@@ -963,9 +970,11 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
       mat4.identity(transform);
       var endPt = cmd.parameters.endPt.value;
       var startPt = cmd.parameters.startPt.value;
-      vec3.sub(endPt,endPt,startPt);
+      //creation is bad
+      var dir = vec3.create();
+      vec3.sub(dir,endPt,startPt);
       
-      mat4.translate(transform, currWindow.camera.cameraMatrix, endPt);
+      mat4.translate(transform, currWindow.camera.cameraMatrix, dir);
       modeler.shader.uniforms.mvMatrix.set(transform);
       for(i=0;i<len;++i) {
         objs[i].draw();
@@ -988,7 +997,148 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
       objs[i].transform(transform);
     }
   }
-  } 
+  },
+  {
+  "name":"Copy",
+  "parameters": {
+    "objects" :
+     {"type": "object",
+      "isList": true},
+    "startPt" : 
+      {"type": "point"},
+    "endPt" :
+      {"type": "point"}
+    },
+  "start" : function(cmd) {
+    //check for valid input?
+  },
+  "preview" : function(cmd) {
+    var endPt = cmd.parameters.endPt.value;
+    if(endPt) {
+      var objs = cmd.parameters.objects.value;
+      var i,len = objs.length;
+      //get transformation
+      var transform = mat4.create();
+      mat4.identity(transform);
+      var endPt = cmd.parameters.endPt.value;
+      var startPt = cmd.parameters.startPt.value;
+      //creation is bad
+      var dir = vec3.create();
+      vec3.sub(dir,endPt,startPt);
+      
+      mat4.translate(transform, currWindow.camera.cameraMatrix, dir);
+      modeler.shader.uniforms.mvMatrix.set(transform);
+      for(i=0;i<len;++i) {
+        objs[i].draw();
+        
+      }
+      modeler.shader.uniforms.mvMatrix.set(currWindow.camera.cameraMatrix);
+    }
+  },
+  "finish" : function(cmd) {
+    var objs = cmd.parameters.objects.value;
+    var i,len = objs.length;
+    //get transformation
+    var transform = mat4.create();
+    mat4.identity(transform);
+    var endPt = cmd.parameters.endPt.value;
+    var startPt = cmd.parameters.startPt.value;
+    vec3.sub(endPt,endPt,startPt);
+    mat4.translate(transform, transform, endPt);
+    for(i=0;i<len;++i) {
+      //check type
+      var obj = objs[i];
+      //not a sub object
+      if(obj.obj === undefined) {
+        //make a copy
+        var newObj = obj.clone();
+        newObj.transform(transform);
+        modeler.objects.push(newObj);
+      }
+    }
+  }
+  },
+  {
+  "name":"Rotate",
+  "parameters": {
+    "objects" :
+     {"type": "object",
+      "isList": true},
+    "center" : 
+      {"type": "point"},
+    "angle" :
+      {"type": "number"},
+    "plane" :
+      {"default" : function() { return modeler.currWindow.plane;}}
+    },
+  "start" : function(cmd) {
+    //check for valid input?
+  },
+  "preview" : function(cmd) {
+    var angle = cmd.parameters.angle.value;
+    var center = cmd.parameters.center.value;
+    var plane = cmd.parameters.plane.value;
+    if(angle !== undefined) {
+      var objs = cmd.parameters.objects.value;
+      var i,len = objs.length;
+      //get transformation
+      var transform = mat4.create();
+      mat4.identity(transform);
+      //center
+      mat4.translate(transform, currWindow.camera.cameraMatrix, center);
+      mat4.rotate(transform, transform, angle, plane);
+      vec3.negate(center,center);
+      mat4.translate(transform, transform, center);
+      modeler.shader.uniforms.mvMatrix.set(transform);
+      vec3.negate(center,center);
+      for(i=0;i<len;++i) {
+        objs[i].draw();
+      }
+      modeler.shader.uniforms.mvMatrix.set(currWindow.camera.cameraMatrix);
+    }
+  },
+  "finish" : function(cmd) {
+    var objs = cmd.parameters.objects.value;
+
+    var angle = cmd.parameters.angle.value;
+    var center = cmd.parameters.center.value;
+    var plane = cmd.parameters.plane.value;
+
+    var i,len = objs.length;
+    //get transformation
+    var transform = mat4.create();
+    mat4.identity(transform);
+      //center
+    mat4.translate(transform, transform, center);
+    mat4.rotate(transform, transform, angle, plane);
+    vec3.negate(center,center);
+    mat4.translate(transform, transform, center);
+    vec3.negate(center,center);
+    for(i=0;i<len;++i) {
+      objs[i].transform(transform);
+    }
+  }
+  },
+  {
+  "name":"EditModeOn",
+  "parameters": {
+    "objects" :
+     {"type": "object",
+      "isList": true},
+    },
+  "start" : function(cmd) {
+    //check for valid input?
+  },
+  "preview" : function(cmd) {
+  },
+  "finish" : function(cmd) {
+    var objs = cmd.parameters.objects.value;
+    var i, len = objs.length;
+    for(i=0;i<len;++i) {
+      objs[i].enableEditMode();
+    }
+  }
+  }  
   ];
   return modeler;
 });

@@ -1,4 +1,4 @@
-define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],function(nurbs, modeler, glMatrix, vboMesh, aabb, exports) {
+define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", "controlPt", 'exports'],function(nurbs, modeler, glMatrix, vboMesh, aabb, ControlPt, exports) {
   "use strict";
   var vec3 = glMatrix.vec3;
   var vec4 = glMatrix.vec4;
@@ -11,40 +11,67 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     this.aabb = new aabb.AABBNode();
     this.isClosed = false;
     this.mode = 0;
+    this.needsUpdate = true;
+    this.controlPts = [];
     //color / material / layer info
   }
   
   Curve.prototype.draw = function() {
+    if(this.needsUpdate) {
+      this.updateMesh();
+    }
     //disable normals
     modeler.shader.attribs.vertexNormal.disable();
     modeler.gl.vertexAttrib3fv(modeler.shader.attribs.vertexNormal.location,[0,0,0]);
     //do color
     if(this.selected) {
       //modeler.selectedColor
-      modeler.shader.uniforms.matColor.set([1.0,1.0,0.0,1.0]);
+      modeler.shader.uniforms.matColor.set(modeler.selectedColor);
     } else {
       modeler.shader.uniforms.matColor.set([0.0,0.0,0.0,1.0]);
     }
     
+    
+    var numControlPts = this.rep.controlPts.length;
     modeler.shader.attribs.vertexPosition.set(this.display.vertexBuffer);
-    modeler.gl.drawArrays(modeler.gl.LINE_STRIP,0,this.display.numVertices);
+    
+    modeler.gl.drawArrays(modeler.gl.LINE_STRIP,numControlPts,this.display.numVertices-numControlPts);
     
     //draw control points
     if(this.mode == 1) {
+      modeler.shader.uniforms.matColor.set([0.8,0.8,0.8,0.9]);
+      modeler.gl.drawArrays(modeler.gl.LINE_STRIP,0,numControlPts);
+      for(var i=0;i<numControlPts;++i) {
+        var pt = this.controlPts[i];
+        if(pt.selected) {
+          modeler.shader.uniforms.matColor.set(modeler.selectedColor);        
+        } else {
+          modeler.shader.uniforms.matColor.set([0.0,0.0,0.0,1.0]);        
+        }
+        modeler.gl.drawArrays(modeler.gl.POINTS,i,1);      
       
+      }
     }
   }
   
   Curve.prototype.updateMesh = (function() {
     var pt = vec3.create();
     return function updateMesh() {
+      vboMesh.clear(this.display);
+      //first add control pts
+      
+      var controlPts = this.rep.controlPts;
+      var numControlPts = controlPts.length;
+      for(var i=0;i<numControlPts;++i) {
+        vec4.projectDown(controlPts[i],pt);
+        vboMesh.addVertex(this.display, pt);
+      }
       //add adaptive detail
       var domain = nurbs.domain(this.rep);
       var samples = this.rep.controlPts.length*5;
       var u;
       var domainSpan = domain[1]-domain[0];
       
-      vboMesh.clear(this.display);
       for(var i=0;i<=samples;++i) {
         u = domain[0]+i/samples*domainSpan;
         nurbs.evaluateCrv(this.rep, u, pt);
@@ -65,8 +92,30 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
       vec3.transformMat4(pt, pt, mat);
       vec4.unprojectDown(pt,pt);
     }
+    this.needsUpdate = true;
   }
   
+  Curve.prototype.enableEditMode = function() {
+    if(this.mode === 0) {
+      for(var i=0;i<this.rep.controlPts.length;++i) {
+        this.controlPts.push(new ControlPt(this, this.rep.controlPts[i]));
+      }
+      this.mode = 1;
+    }    
+  }
+  
+  Curve.prototype.disableEditMode = function() {
+    //remove any control pts from selection
+    for(var i=0;i<this.controlPts.length;++i) {
+      var pt = this.controlPts[i];
+      var index = modeler.selection.indexOf(pt);
+      if(index >= 0) {
+        modeler.selection.splice(index,1);
+      }
+    }
+    this.controlPts.length = 0;
+    this.mode = 0;
+  }  
   var commands = [
     {
     "name":"Circle",
@@ -99,13 +148,11 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
         //CHANGE: efficiency
         if(currCommand.parameters.center.value && currCommand.parameters.radius.value) {
           var circle = basicCurves.circlePtRadius(currCommand.parameters.center.value, currCommand.parameters.radius.value, currCommand.parameters.plane.value);
-          circle.updateMesh();
           circle.draw();
         }
       },
       "finish" : function(currCommand) {
         var circle = basicCurves.circlePtRadius(currCommand.parameters.center.value, currCommand.parameters.radius.value, currCommand.parameters.plane.value);
-        circle.updateMesh();
         
         modeler.objects.push(circle);
       }
@@ -129,16 +176,12 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
           pts.push(modeler.selectedPt);
           //var crv = nurbs.createCrv(currCommand.parameters.points.value,currCommand.parameters.degree.value);
           var crv = basicCurves.curveFromPts(pts, currCommand.parameters.degree.value);
-          crv.updateMesh();
           crv.draw();
         }
       },
       "finish" : function(currCommand) {
         if(currCommand.parameters.points.value.length > 1) {
           var newCurve = basicCurves.curveFromPts(currCommand.parameters.points.value,currCommand.parameters.degree.value);
-          
-          //where do I update drawing mesh, perhaps with a flag
-          newCurve.updateMesh();
           
           modeler.objects.push(newCurve);
         }
@@ -257,7 +300,6 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
       var obj = new Curve();
       obj.rep = crv;
       obj.isClosed = true;
-      obj.updateMesh();
       return obj;
     };
   })();

@@ -11,10 +11,14 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     this.rep = null;
     this.aabb = new aabb.AABBNode();
     this.mode = 0;
+    this.needsUpdate = true;
     //color / material / layer info
   }
   
   Surface.prototype.draw = function() {
+    if(this.needsUpdate) {
+      this.updateMesh();
+    }
     //disable normals
     modeler.shader.attribs.vertexNormal.enable();
     //do color
@@ -73,7 +77,7 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
           }
         }
       }
-      
+      this.needsUpdate = false;
       vboMesh.buffer(this.display,modeler.gl);
     }
   })();
@@ -89,6 +93,7 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
       vec3.transformMat4(pt, pt, mat);
       vec4.unprojectDown(pt,pt);
     }
+    this.needsUpdate = true;
   }
   
   //modeler is not initialized so modeler.CURVE does not work
@@ -118,7 +123,6 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
       srf.rep = nurbs.loft(silliness);
       if(srf.rep) {
         modeler.objects.push(srf);
-        srf.updateMesh();
       }
     }
   }

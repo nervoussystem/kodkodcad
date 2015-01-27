@@ -78,10 +78,15 @@ define(function() {
                 self.mouseMoved(event);
             }
             if(self.isMouseDown) {
-                self.mouseDragging = true;
-                if(typeof self.mouseDragged !== 'undefined') {
-                    self.mouseDragged(event);
+              if(!self.mouseDragging) {
+                if(typeof self.mouseDragStart !== 'undefined') {
+                  self.mouseDragStart();
                 }
+              }
+              self.mouseDragging = true;
+              if(typeof self.mouseDragged !== 'undefined') {
+                  self.mouseDragged(event);
+              }
             }
         }
     }
