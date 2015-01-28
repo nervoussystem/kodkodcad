@@ -377,6 +377,20 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
     return interFound;
   }
   
+  function deleteObjects(objs) {
+    var i,len = objs.length;
+    for(i=0;i<len;++i) {
+      var obj = objs[i];
+      //check for subobjects
+      if(obj.obj === undefined) {
+        var index = modeler.objects.indexOf(obj);
+        if(index != -1) {
+          modeler.objects.splice(index,1);
+        }
+      }
+    }
+  }
+  
   modeler.selectObject = function() {
     var ray = mouseRay(mouseHandler.mouseX,mouseHandler.mouseY);
     var i0,i1,i2;
@@ -516,10 +530,20 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
     }
     commandDiv.appendChild(cmdDiv);
     cmd.start();
+    getCmdParameter(cmd.parameters[firstParam],cmdDiv.children[1].children[1]);
     //check for preselection
     
     //start selecting first param
-    getCmdParameter(cmd.parameters[firstParam],cmdDiv.children[1].children[1]);
+    if(modeler.selection.length > 0) {
+      var first = cmd.parameters[firstParam];
+      if(first.type === "object") {
+        //filter
+        //#need to add
+        
+        first.value = modeler.selection.slice(0);
+        nextParameter();
+      }
+    }
   }
   
   function makeParamUI(param, paramName, paramDiv) {
@@ -806,10 +830,14 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
           deselectAll();
         } else {
           for(var i=0;i<modeler.objects.length;++i) {
-            modeler.objects[i].disableEditMode();
+            if(modeler.objects[i].disableEditMode !== undefined) modeler.objects[i].disableEditMode();
           }
         }
         break;
+      case 46:
+        deleteObjects(modeler.selection);
+        deselectAll();
+        break
     }
   }
   
@@ -911,21 +939,41 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
       var i,len = objs.length;
       //get transformation
       var transform = mat4.create();
-      var invMatrix = mat4.create();
+      var tempMat = mat4.create();
       mat4.identity(transform);
       var endPt = cmd.parameters.endPt.value;
       var startPt = cmd.parameters.startPt.value;
       var dir = vec3.create();
       vec3.sub(dir,endPt,startPt);
       
-      mat4.translate(transform, mvMatrix, dir);
-      modeler.shader.uniforms.mvMatrix.set(transform);
-      mat4.invert(invMatrix, transform);
+      mat4.translate(transform, transform, dir);
+      mat4.translate(tempMat, mvMatrix, dir);
+      modeler.shader.uniforms.mvMatrix.set(tempMat);
+      var subobjects = [];
       for(i=0;i<len;++i) {
-        objs[i].draw();
-        
+        //check if sub object
+        var obj = objs[i];
+        if(obj.obj === undefined) {
+          obj.draw();
+        } else {
+          obj.transform(transform);
+          subobjects.push(obj);
+        }
       }
       modeler.shader.uniforms.mvMatrix.set(mvMatrix);
+      
+      //make translation matrix
+      //#optimize
+      mat4.invert(tempMat, transform);
+      //draw modified objects
+      for(i=0, len = subobjects.length;i<len;++i) {
+        if(obj.obj.needsUpdate) {
+          obj.obj.draw();
+        }
+      }
+      for(i=0, len = subobjects.length;i<len;++i) {
+        obj.transform(tempMat);
+      }
     }
   },
   "finish" : function(cmd) {
@@ -1056,6 +1104,23 @@ define(['domReady!','webgl','modelWindow','aabb','glShader', 'basicCurves', 'sur
         modeler.objects.push(newObj);
       }
     }
+  }
+  },
+  {
+  "name":"Delete",
+  "parameters": {
+    "objects" :
+     {"type": "object",
+      "isList": true},
+    },
+  "start" : function(cmd) {
+    //check for valid input?
+  },
+  "preview" : function(cmd) {
+  },
+  "finish" : function(cmd) {
+    var objs = cmd.parameters.objects.value;
+    deleteObjects(objs);
   }
   },
   {

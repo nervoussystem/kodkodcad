@@ -12,6 +12,7 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     this.aabb = new aabb.AABBNode();
     this.mode = 0;
     this.needsUpdate = true;
+    this.controlPts = [];
     //color / material / layer info
   }
   
@@ -23,8 +24,7 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     modeler.shader.attribs.vertexNormal.enable();
     //do color
     if(this.selected) {
-      //modeler.selectedColor
-      modeler.shader.uniforms.matColor.set([1.0,1.0,0.0,1.0]);
+      modeler.shader.uniforms.matColor.set(modeler.selectedColor);
     } else {
       modeler.shader.uniforms.matColor.set([0.8,0.8,0.8,1.0]);
     }
@@ -36,9 +36,20 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     
     //draw outline?
     
-    //draw control points
+    //edit mode
     if(this.mode == 1) {
+      var numControlPts = this.controlPts.length;
+      //draw control points
+      for(var i=0;i<numControlPts;++i) {
+        var pt = this.controlPts[i];
+        if(pt.selected) {
+          modeler.shader.uniforms.matColor.set(modeler.selectedColor);        
+        } else {
+          modeler.shader.uniforms.matColor.set([0.0,0.0,0.0,1.0]);        
+        }
+        modeler.gl.drawArrays(modeler.gl.POINTS,i,1);      
       
+      }      
     }
   }
   
@@ -82,16 +93,44 @@ define(["nurbs","modeler", "gl-matrix-min", "vboMesh","aabb", 'exports'],functio
     }
   })();
   
+  Surface.prototype.enableEditMode = function() {
+    if(this.mode === 0) {
+      var i,j,len,len2;
+      for(i=0, len=this.rep.controlPts.length;i<len;++i) {
+        var pts = this.rep.controlPts[i];
+        for(j=0, len2 = pts.length;j<len2;++j) {
+          this.controlPts.push(new ControlPt(this, pts[j]));
+        }
+      }
+      this.mode = 1;
+    }
+  }
+  
+  Surface.prototype.disableEditMode = function() {
+    if(this.mode === 1) {
+      for(var i=0;i<this.controlPts.length;++i) {
+        var pt = this.controlPts[i];
+        var index = modeler.selection.indexOf(pt);
+        if(index >= 0) {
+          modeler.selection.splice(index,1);
+        }
+      }
+      this.mode = 0;
+      this.controlPts.length = 0;
+    }
+  }
+  
   Surface.prototype.transform = function(mat) {
     var len = this.rep.controlPts.length;
-    if(this.isClosed) {
-      len -= 1;
-    }
-    for(var i=0;i<len;++i) {
-      var pt = this.rep.controlPts[i];
-      vec4.projectDown(pt,pt);
-      vec3.transformMat4(pt, pt, mat);
-      vec4.unprojectDown(pt,pt);
+    var i,j, len2;
+    for(i=0;i<len;++i) {
+      var pts = this.rep.controlPts[i];
+      for(j=0, len2 = pts.length; j<len2; ++j) {
+        var pt = pts[j];
+        vec4.projectDown(pt,pt);
+        vec3.transformMat4(pt, pt, mat);
+        vec4.unprojectDown(pt,pt);
+      }
     }
     this.needsUpdate = true;
   }
